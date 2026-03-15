@@ -267,6 +267,14 @@ class WatchlistCreate(BaseModel):
     sources: list[WatchlistSourceCreate] = []
 
 
+class WatchlistUpdate(BaseModel):
+    name: Optional[str] = None
+    topic: Optional[str] = None
+    frequency: Optional[str] = None
+    interval_days: Optional[int] = None
+    description: Optional[str] = None
+
+
 class WatchlistResponse(BaseModel):
     id: int
     name: str
@@ -342,6 +350,8 @@ class UserResponse(BaseModel):
     id: int
     email: str
     workspace_id: Optional[int] = None
+    is_admin: bool = False
+    is_active: bool = True
     nickname: str
     full_name: Optional[str] = None
     avatar_data_url: Optional[str] = None
@@ -366,6 +376,23 @@ class UserUpdate(BaseModel):
     ai_name: Optional[str] = None
     timezone: Optional[str] = None
     language: Optional[str] = None
+
+
+class AdminUserCreate(BaseModel):
+    email: str
+    password: str
+    nickname: str
+    full_name: Optional[str] = None
+    is_admin: bool = False
+    is_active: bool = True
+
+
+class AdminUserUpdate(BaseModel):
+    nickname: Optional[str] = None
+    full_name: Optional[str] = None
+    is_admin: Optional[bool] = None
+    is_active: Optional[bool] = None
+    password: Optional[str] = None
 
 
 class ChangePasswordRequest(BaseModel):

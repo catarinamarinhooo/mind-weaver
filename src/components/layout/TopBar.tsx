@@ -1,4 +1,4 @@
-import { Bell, LogOut, Plus, Search, Settings, User } from "lucide-react";
+import { Bell, LogOut, Plus, Search, Settings, Shield, User } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { QuickAddModal } from "@/components/shared/QuickAddModal";
@@ -171,6 +171,12 @@ export function TopBar() {
                 <Settings className="mr-2 h-4 w-4" />
                 Settings
               </DropdownMenuItem>
+              {profile.isAdmin && (
+                <DropdownMenuItem onClick={() => navigate("/admin")}>
+                  <Shield className="mr-2 h-4 w-4" />
+                  Admin
+                </DropdownMenuItem>
+              )}
               <DropdownMenuSeparator />
               <DropdownMenuItem
                 onClick={() => {

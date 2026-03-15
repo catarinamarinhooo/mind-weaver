@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Sparkles, Link2 } from "lucide-react";
+import { Link2, Sparkles, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   createConnection,
@@ -15,32 +15,21 @@ import {
   type ConnectionResponse,
   type TopicResponse,
 } from "@/lib/api";
-
-type EntityType =
-  | "thought"
-  | "knowledge"
-  | "business_idea"
-  | "work_idea"
-  | "personal_idea"
-  | "quote"
-  | "topic"
-  | "glossary_term";
+import {
+  buildRelatedSuggestions,
+  dismissLearnedSuggestion,
+  getDismissedSuggestionPairs,
+  type ConnectableEntity,
+  type ConnectableEntityType,
+} from "@/lib/connectionLearning";
+import { getUserProfile } from "@/lib/userProfile";
 
 interface SourceEntity {
   id: number;
-  type: EntityType;
+  type: ConnectableEntityType;
   label: string;
   text: string;
   topics?: TopicResponse[];
-}
-
-interface Suggestion {
-  key: string;
-  targetType: EntityType;
-  targetId: number;
-  label: string;
-  score: number;
-  reasons: string[];
 }
 
 interface ConnectionSuggestionsPanelProps {
@@ -48,80 +37,30 @@ interface ConnectionSuggestionsPanelProps {
   onConnectionCreated?: (connection: ConnectionResponse) => void;
 }
 
-const stopWords = new Set([
-  "the",
-  "and",
-  "for",
-  "with",
-  "that",
-  "this",
-  "from",
-  "into",
-  "your",
-  "about",
-  "have",
-  "will",
-  "been",
-  "como",
-  "para",
-  "com",
-  "uma",
-  "mais",
-  "isso",
-  "este",
-  "essa",
-  "from",
-  "http",
-  "https",
-  "www",
-]);
-
-function normalizeText(value: string) {
-  return value
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, " ")
-    .replace(/[^a-z0-9\s]/g, " ");
-}
-
-function tokenize(value: string) {
-  return Array.from(
-    new Set(
-      normalizeText(value)
-        .split(/\s+/)
-        .map((token) => token.trim())
-        .filter((token) => token.length >= 3 && !stopWords.has(token))
-    )
-  );
-}
-
-function getTopicNames(topics?: TopicResponse[]) {
-  return new Set((topics || []).map((topic) => topic.name.toLowerCase()));
-}
-
 export function ConnectionSuggestionsPanel({
   source,
   onConnectionCreated,
 }: ConnectionSuggestionsPanelProps) {
   const [existingConnections, setExistingConnections] = useState<ConnectionResponse[]>([]);
+  const [learningConnections, setLearningConnections] = useState<ConnectionResponse[]>([]);
   const [error, setError] = useState("");
   const [creatingKey, setCreatingKey] = useState<string | null>(null);
-  const [allEntities, setAllEntities] = useState<
-    Array<{
-      type: EntityType;
-      id: number;
-      label: string;
-      text: string;
-      topics?: TopicResponse[];
-    }>
-  >([]);
+  const [dismissedSuggestionKeys, setDismissedSuggestionKeys] = useState<Set<string>>(new Set());
+  const [allEntities, setAllEntities] = useState<ConnectableEntity[]>([]);
+
+  const userKey = String(getUserProfile().id || getUserProfile().email || "default");
+
+  useEffect(() => {
+    setDismissedSuggestionKeys(getDismissedSuggestionPairs(userKey));
+  }, [userKey]);
 
   useEffect(() => {
     async function loadSuggestionData() {
       try {
         setError("");
         const [
-          connections,
+          sourceConnections,
+          allConnections,
           thoughts,
           knowledgeItems,
           businessIdeas,
@@ -132,6 +71,7 @@ export function ConnectionSuggestionsPanel({
           glossaryTerms,
         ] = await Promise.all([
           getConnections({ entity_type: source.type, entity_id: source.id }),
+          getConnections(),
           getThoughts(),
           getKnowledgeItems(),
           getBusinessIdeas(),
@@ -142,7 +82,8 @@ export function ConnectionSuggestionsPanel({
           getGlossaryTerms(),
         ]);
 
-        setExistingConnections(connections);
+        setExistingConnections(sourceConnections);
+        setLearningConnections(allConnections);
         setAllEntities([
           ...thoughts.map((item) => ({
             type: "thought" as const,
@@ -196,12 +137,14 @@ export function ConnectionSuggestionsPanel({
             id: item.id,
             label: item.title,
             text: [item.title, item.description, item.category, item.goal].filter(Boolean).join(" "),
+            topics: item.topics,
           })),
           ...quotes.map((item) => ({
             type: "quote" as const,
             id: item.id,
             label: item.book_title,
             text: [item.book_title, item.quote_text, item.page, item.thoughts].filter(Boolean).join(" "),
+            topics: item.topics,
           })),
           ...topics.map((item) => ({
             type: "topic" as const,
@@ -227,9 +170,7 @@ export function ConnectionSuggestionsPanel({
         ]);
       } catch (err) {
         setError(
-          err instanceof Error
-            ? err.message
-            : "Failed to load connection suggestions."
+          err instanceof Error ? err.message : "Failed to load connection suggestions."
         );
       }
     }
@@ -237,59 +178,25 @@ export function ConnectionSuggestionsPanel({
     void loadSuggestionData();
   }, [source.id, source.type]);
 
-  const suggestions = useMemo(() => {
-    const connectedKeys = new Set(
-      existingConnections.map((connection) => `${connection.target_type}:${connection.target_id}`)
-    );
-    const sourceTokens = tokenize(`${source.label} ${source.text}`);
-    const sourceTopicNames = getTopicNames(source.topics);
+  const suggestions = useMemo(
+    () =>
+      buildRelatedSuggestions({
+        source,
+        allEntities,
+        existingConnections,
+        learningConnections,
+        dismissedPairs: dismissedSuggestionKeys,
+        limit: 5,
+      }),
+    [allEntities, dismissedSuggestionKeys, existingConnections, learningConnections, source]
+  );
 
-    return allEntities
-      .filter((entity) => !(entity.type === source.type && entity.id === source.id))
-      .filter((entity) => !connectedKeys.has(`${entity.type}:${entity.id}`))
-      .map((entity) => {
-        const reasons: string[] = [];
-        let score = 0;
+  const handleCreateSuggestion = async (suggestionKey: string) => {
+    const suggestion = suggestions.find((item) => item.key === suggestionKey);
+    if (!suggestion) {
+      return;
+    }
 
-        const targetTokens = tokenize(`${entity.label} ${entity.text}`);
-        const overlappingTokens = sourceTokens.filter((token) => targetTokens.includes(token));
-        if (overlappingTokens.length > 0) {
-          score += Math.min(overlappingTokens.length, 3) * 2;
-          reasons.push(`shared keywords: ${overlappingTokens.slice(0, 3).join(", ")}`);
-        }
-
-        const targetTopicNames = getTopicNames(entity.topics);
-        const sharedTopics = Array.from(sourceTopicNames).filter((topic) =>
-          targetTopicNames.has(topic)
-        );
-        if (sharedTopics.length > 0) {
-          score += sharedTopics.length * 4;
-          reasons.push(`shared topics: ${sharedTopics.join(", ")}`);
-        }
-
-        if (entity.type === "topic") {
-          const topicName = entity.label.toLowerCase();
-          if (sourceTopicNames.has(topicName) || sourceTokens.includes(topicName)) {
-            score += 5;
-            reasons.push("topic appears directly in this entry");
-          }
-        }
-
-        return {
-          key: `${entity.type}:${entity.id}`,
-          targetType: entity.type,
-          targetId: entity.id,
-          label: entity.label,
-          score,
-          reasons,
-        };
-      })
-      .filter((suggestion) => suggestion.score > 0)
-      .sort((a, b) => b.score - a.score || a.label.localeCompare(b.label))
-      .slice(0, 5);
-  }, [allEntities, existingConnections, source]);
-
-  const handleCreateSuggestion = async (suggestion: Suggestion) => {
     try {
       setCreatingKey(suggestion.key);
       setError("");
@@ -298,10 +205,11 @@ export function ConnectionSuggestionsPanel({
         source_id: source.id,
         target_type: suggestion.targetType,
         target_id: suggestion.targetId,
-        relationship_type: "suggested match",
+        relationship_type: "learned match",
         notes: suggestion.reasons.join(" | "),
       });
       setExistingConnections((current) => [connection, ...current]);
+      setLearningConnections((current) => [connection, ...current]);
       onConnectionCreated?.(connection);
     } catch (err) {
       setError(
@@ -312,6 +220,19 @@ export function ConnectionSuggestionsPanel({
     }
   };
 
+  const handleDismissSuggestion = (suggestionKey: string) => {
+    const suggestion = suggestions.find((item) => item.key === suggestionKey);
+    if (!suggestion) {
+      return;
+    }
+    dismissLearnedSuggestion(
+      userKey,
+      { type: source.type, id: source.id },
+      { type: suggestion.targetType, id: suggestion.targetId }
+    );
+    setDismissedSuggestionKeys(getDismissedSuggestionPairs(userKey));
+  };
+
   return (
     <div className="glass-card p-6">
       <div className="mb-4 flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
@@ -320,30 +241,26 @@ export function ConnectionSuggestionsPanel({
       </div>
 
       <p className="mb-4 text-sm text-muted-foreground">
-        Heuristic suggestions based on shared topics and overlapping keywords. Mais
-        tarde isto pode ser substituido ou reforcado por AI/LLM.
+        Suggestions are now ranked by shared topics, shared keywords, existing
+        connections, and patterns from the links you have already accepted or rejected.
       </p>
 
       {error && <div className="mb-3 text-sm text-red-500">{error}</div>}
 
       {suggestions.length === 0 ? (
         <div className="text-sm text-muted-foreground">
-          No obvious suggestions yet. Add more topics or richer descriptions to improve matches.
+          No strong suggestions yet. Add more topics, richer descriptions, or make a few
+          manual connections so the ranking can learn your patterns.
         </div>
       ) : (
         <div className="space-y-3">
           {suggestions.map((suggestion) => (
-            <div
-              key={suggestion.key}
-              className="rounded-lg border border-border p-3"
-            >
+            <div key={suggestion.key} className="rounded-lg border border-border p-3">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <div className="text-sm font-medium text-foreground">
-                    {suggestion.label}
-                  </div>
+                  <div className="text-sm font-medium text-foreground">{suggestion.label}</div>
                   <div className="mt-1 text-xs uppercase tracking-wider text-muted-foreground">
-                    {suggestion.targetType.replaceAll("_", " ")} • score {suggestion.score}
+                    {suggestion.targetType.replaceAll("_", " ")} · score {suggestion.score}
                   </div>
                   <div className="mt-2 space-y-1 text-sm text-muted-foreground">
                     {suggestion.reasons.map((reason) => (
@@ -355,13 +272,23 @@ export function ConnectionSuggestionsPanel({
                   </div>
                 </div>
 
-                <Button
-                  size="sm"
-                  onClick={() => void handleCreateSuggestion(suggestion)}
-                  disabled={creatingKey === suggestion.key}
-                >
-                  {creatingKey === suggestion.key ? "Adding..." : "Connect"}
-                </Button>
+                <div className="flex shrink-0 items-center gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => handleDismissSuggestion(suggestion.key)}
+                    title="Not relevant"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </Button>
+                  <Button
+                    size="sm"
+                    onClick={() => void handleCreateSuggestion(suggestion.key)}
+                    disabled={creatingKey === suggestion.key}
+                  >
+                    {creatingKey === suggestion.key ? "Adding..." : "Connect"}
+                  </Button>
+                </div>
               </div>
             </div>
           ))}
@@ -370,3 +297,4 @@ export function ConnectionSuggestionsPanel({
     </div>
   );
 }
+

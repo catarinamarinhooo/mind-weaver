@@ -43,6 +43,7 @@ from app.schemas import (
     GlossaryAttachment,
     UploadResponse,
     WatchlistCreate,
+    WatchlistUpdate,
     WatchlistResponse,
     WatchlistSourceCreate,
     WatchlistSourceResponse,
@@ -55,6 +56,8 @@ from app.schemas import (
     UserUpdate,
     AuthResponse,
     WorkspaceResponse,
+    AdminUserCreate,
+    AdminUserUpdate,
     ChangePasswordRequest,
     ForgotPasswordRequest,
     ResetPasswordRequest,
@@ -74,6 +77,9 @@ SESSION_COOKIE_SECURE = (
     os.getenv("SESSION_COOKIE_SECURE", "false").strip().lower() == "true"
 )
 SESSION_COOKIE_SAMESITE = "none" if SESSION_COOKIE_SECURE else "lax"
+ADMIN_EMAIL = os.getenv("ADMIN_EMAIL", "").strip().lower()
+ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "").strip()
+ADMIN_NICKNAME = os.getenv("ADMIN_NICKNAME", "Admin").strip() or "Admin"
 MAX_UPLOAD_SIZE_BYTES = 10 * 1024 * 1024
 SESSION_TTL = timedelta(days=30)
 RESET_TOKEN_TTL = timedelta(hours=1)
@@ -204,6 +210,8 @@ def serialize_user(user: models.User):
         id=user.id,
         email=user.email,
         workspace_id=user.workspace_id,
+        is_admin=bool(user.is_admin),
+        is_active=bool(user.is_active),
         nickname=user.nickname,
         full_name=user.full_name,
         avatar_data_url=user.avatar_data_url,
@@ -249,7 +257,18 @@ def get_current_user(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="User not found for this session",
         )
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User account is inactive",
+        )
     return user
+
+
+def require_admin(current_user: models.User = Depends(get_current_user)):
+    if not current_user.is_admin:
+        raise HTTPException(status_code=403, detail="Administrator access required")
+    return current_user
 
 
 def get_current_session(
@@ -272,6 +291,52 @@ def get_current_session(
             detail="Session expired",
         )
     return session
+
+
+def ensure_admin_user():
+    if not ADMIN_EMAIL or not ADMIN_PASSWORD:
+        return
+
+    db = SessionLocal()
+    try:
+        existing_admin = (
+            db.query(models.User)
+            .filter(models.User.email == ADMIN_EMAIL)
+            .first()
+        )
+        if existing_admin:
+            if not existing_admin.is_admin:
+                existing_admin.is_admin = True
+            if not existing_admin.is_active:
+                existing_admin.is_active = True
+            db.commit()
+            return
+
+        workspace = models.Workspace(
+            name="CortexKnows Admin Workspace",
+            slug=slugify_workspace_name("cortexknows admin"),
+        )
+        db.add(workspace)
+        db.commit()
+        db.refresh(workspace)
+
+        admin_user = models.User(
+            email=ADMIN_EMAIL,
+            workspace_id=workspace.id,
+            password_hash=hash_password(ADMIN_PASSWORD),
+            is_admin=True,
+            is_active=True,
+            nickname=ADMIN_NICKNAME,
+            full_name=ADMIN_NICKNAME,
+        )
+        db.add(admin_user)
+        db.commit()
+        db.refresh(admin_user)
+
+        workspace.owner_user_id = admin_user.id
+        db.commit()
+    finally:
+        db.close()
 
 
 def serialize_topic(topic: models.Topic):
@@ -731,6 +796,7 @@ def scheduler_loop(stop_event: threading.Event):
 
 @app.on_event("startup")
 def start_scheduler():
+    ensure_admin_user()
     if app.state.scheduler_thread and app.state.scheduler_thread.is_alive():
         return
     app.state.scheduler_stop_event.clear()
@@ -788,7 +854,8 @@ def register(
     db: Session = Depends(get_db),
 ):
     enforce_rate_limit(f"register:{request.client.host if request.client else 'unknown'}", 10, 300)
-    existing_user = db.query(models.User).filter(models.User.email == user_data.email).first()
+    normalized_email = user_data.email.strip().lower()
+    existing_user = db.query(models.User).filter(models.User.email == normalized_email).first()
     if existing_user:
         raise HTTPException(status_code=400, detail="Email already registered")
 
@@ -800,7 +867,7 @@ def register(
     db.flush()
 
     user = models.User(
-        email=user_data.email.strip().lower(),
+        email=normalized_email,
         password_hash=hash_password(user_data.password),
         workspace_id=workspace.id,
         nickname=user_data.nickname.strip(),
@@ -843,6 +910,8 @@ def login(
     )
     if not user or not verify_password(user_data.password, user.password_hash):
         raise HTTPException(status_code=401, detail="Invalid email or password")
+    if not user.is_active:
+        raise HTTPException(status_code=403, detail="This account is inactive")
 
     token = create_session_token()
     session = models.Session(user_id=user.id, token=token)
@@ -883,6 +952,105 @@ def update_me(
     db.commit()
     db.refresh(current_user)
     return serialize_user(current_user)
+
+
+@app.get("/admin/users", response_model=list[UserResponse])
+def admin_list_users(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(require_admin),
+):
+    users = db.query(models.User).order_by(models.User.created_at.desc()).all()
+    return [serialize_user(user) for user in users]
+
+
+@app.post("/admin/users", response_model=UserResponse)
+def admin_create_user(
+    payload: AdminUserCreate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(require_admin),
+):
+    normalized_email = payload.email.strip().lower()
+    existing_user = db.query(models.User).filter(models.User.email == normalized_email).first()
+    if existing_user:
+        raise HTTPException(status_code=400, detail="Email already registered")
+
+    workspace = models.Workspace(
+        name=f"{payload.nickname.strip()}'s Workspace",
+        slug=slugify_workspace_name(payload.nickname.strip()),
+    )
+    db.add(workspace)
+    db.flush()
+
+    user = models.User(
+        email=normalized_email,
+        workspace_id=workspace.id,
+        password_hash=hash_password(payload.password),
+        is_admin=payload.is_admin,
+        is_active=payload.is_active,
+        nickname=payload.nickname.strip(),
+        full_name=(payload.full_name or "").strip() or payload.nickname.strip(),
+        tone="clear and practical",
+        default_capture_type="knowledge",
+        ai_name="Cortex",
+        timezone="Europe/London",
+        language="en",
+    )
+    db.add(user)
+    db.flush()
+    workspace.owner_user_id = user.id
+    db.commit()
+    db.refresh(user)
+    return serialize_user(user)
+
+
+@app.put("/admin/users/{user_id}", response_model=UserResponse)
+def admin_update_user(
+    user_id: int,
+    payload: AdminUserUpdate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(require_admin),
+):
+    user = db.query(models.User).filter(models.User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    data = payload.model_dump(exclude_unset=True)
+    if "nickname" in data and data["nickname"] is not None:
+        normalized_nickname = data["nickname"].strip()
+        if normalized_nickname:
+            user.nickname = normalized_nickname
+    if "full_name" in data:
+        user.full_name = (data["full_name"] or "").strip() or user.full_name
+    if "is_admin" in data and data["is_admin"] is not None:
+        user.is_admin = data["is_admin"]
+    if "is_active" in data and data["is_active"] is not None:
+        user.is_active = data["is_active"]
+    if "password" in data and data["password"]:
+        user.password_hash = hash_password(data["password"].strip())
+
+    db.commit()
+    db.refresh(user)
+    return serialize_user(user)
+
+
+@app.delete("/admin/users/{user_id}")
+def admin_delete_user(
+    user_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(require_admin),
+):
+    if current_user.id == user_id:
+        raise HTTPException(status_code=400, detail="Admin cannot delete the current session user")
+
+    user = db.query(models.User).filter(models.User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    db.query(models.Session).filter(models.Session.user_id == user_id).delete()
+    db.query(models.PasswordResetToken).filter(models.PasswordResetToken.user_id == user_id).delete()
+    db.delete(user)
+    db.commit()
+    return {"message": "User deleted successfully"}
 
 
 @app.post("/auth/change-password", response_model=MessageResponse)
@@ -2180,6 +2348,58 @@ def list_watchlists(
         )
         for watchlist in watchlists
     ]
+
+
+@app.put("/watchlists/{watchlist_id}", response_model=WatchlistResponse)
+def update_watchlist(
+    watchlist_id: int,
+    item: WatchlistUpdate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    watchlist = (
+        db.query(models.Watchlist)
+        .filter(models.Watchlist.id == watchlist_id, models.Watchlist.user_id == current_user.id)
+        .first()
+    )
+    if not watchlist:
+        raise HTTPException(status_code=404, detail="Watchlist not found")
+
+    payload = item.model_dump(exclude_unset=True)
+    if "name" in payload and payload["name"] is not None:
+        normalized_name = payload["name"].strip()
+        if not normalized_name:
+            raise HTTPException(status_code=400, detail="Watchlist name cannot be empty")
+        watchlist.name = normalized_name
+    if "topic" in payload and payload["topic"] is not None:
+        normalized_topic = payload["topic"].strip()
+        if not normalized_topic:
+            raise HTTPException(status_code=400, detail="Watchlist topic cannot be empty")
+        watchlist.topic = normalized_topic
+    if "frequency" in payload and payload["frequency"] is not None:
+        normalized_frequency = payload["frequency"].strip()
+        if not normalized_frequency:
+            raise HTTPException(status_code=400, detail="Watchlist frequency cannot be empty")
+        watchlist.frequency = normalized_frequency
+    if "description" in payload:
+        watchlist.description = (payload["description"] or "").strip() or None
+    if "interval_days" in payload:
+        interval_days = payload["interval_days"]
+        watchlist.interval_days = interval_days if interval_days and interval_days > 0 else None
+
+    db.commit()
+    db.refresh(watchlist)
+
+    sources = (
+        db.query(models.WatchlistSource)
+        .filter(
+            models.WatchlistSource.watchlist_id == watchlist.id,
+            models.WatchlistSource.user_id == current_user.id,
+        )
+        .order_by(models.WatchlistSource.created_at.asc())
+        .all()
+    )
+    return serialize_watchlist(watchlist, sources)
 
 
 @app.get("/watchlists/source-suggestions", response_model=list[SourceSuggestionResponse])

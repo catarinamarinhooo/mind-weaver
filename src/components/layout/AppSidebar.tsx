@@ -1,29 +1,47 @@
-import { NavLink, useLocation } from 'react-router-dom';
+import { NavLink, useLocation } from "react-router-dom";
 import {
-  LayoutDashboard, PenLine, Library, Brain, Lightbulb,
-  Briefcase, Heart, Hash, BookOpen, Eye, Compass,
-  Search, MessageCircle, Quote, ChevronLeft, ChevronRight, GitBranch, Bell,
-} from 'lucide-react';
-import { useState } from 'react';
-import { cn } from '@/lib/utils';
+  Bell,
+  BookOpen,
+  Brain,
+  Briefcase,
+  ChevronLeft,
+  ChevronRight,
+  Compass,
+  Eye,
+  GitBranch,
+  Hash,
+  Heart,
+  LayoutDashboard,
+  Library,
+  Lightbulb,
+  MessageCircle,
+  PenLine,
+  Quote,
+  Search,
+  Shield,
+  Sparkles,
+} from "lucide-react";
+import { getUserProfile } from "@/lib/userProfile";
+import { cn } from "@/lib/utils";
 
-const navItems = [
-  { label: 'Dashboard', path: '/', icon: LayoutDashboard },
-  { label: 'Capture', path: '/capture', icon: PenLine },
-  { label: 'Library', path: '/library', icon: Library },
-  { label: 'Thoughts', path: '/thoughts', icon: Brain },
-  { label: 'Business Ideas', path: '/business-ideas', icon: Lightbulb },
-  { label: 'Work Ideas', path: '/work-ideas', icon: Briefcase },
-  { label: 'Personal Ideas', path: '/personal-ideas', icon: Heart },
-  { label: 'Topics', path: '/topics', icon: Hash },
-  { label: 'Glossary', path: '/glossary', icon: BookOpen },
-  { label: 'Quotes', path: '/quotes', icon: Quote },
-  { label: 'Watchlists', path: '/watchlists', icon: Eye },
-  { label: 'Discovery', path: '/discovery', icon: Compass },
-  { label: 'Updates', path: '/updates', icon: Bell },
-  { label: 'Connections', path: '/connections', icon: GitBranch },
-  { label: 'Search', path: '/search', icon: Search },
-  { label: 'Ask AI', path: '/ask', icon: MessageCircle },
+const baseNavItems = [
+  { label: "Dashboard", path: "/", icon: LayoutDashboard },
+  { label: "Capture", path: "/capture", icon: PenLine },
+  { label: "Library", path: "/library", icon: Library },
+  { label: "Thoughts", path: "/thoughts", icon: Brain },
+  { label: "Business Ideas", path: "/business-ideas", icon: Lightbulb },
+  { label: "Work Ideas", path: "/work-ideas", icon: Briefcase },
+  { label: "Personal Ideas", path: "/personal-ideas", icon: Heart },
+  { label: "Topics", path: "/topics", icon: Hash },
+  { label: "Glossary", path: "/glossary", icon: BookOpen },
+  { label: "Quotes", path: "/quotes", icon: Quote },
+  { label: "Watchlists", path: "/watchlists", icon: Eye },
+  { label: "Discovery", path: "/discovery", icon: Compass },
+  { label: "Updates", path: "/updates", icon: Bell },
+  { label: "Connections", path: "/connections", icon: GitBranch },
+  { label: "Recommended Links", path: "/recommendations", icon: Sparkles },
+  { label: "Search", path: "/search", icon: Search },
+  { label: "Ask AI", path: "/ask", icon: MessageCircle },
 ];
 
 interface AppSidebarProps {
@@ -33,40 +51,41 @@ interface AppSidebarProps {
 
 export function AppSidebar({ collapsed, onToggle }: AppSidebarProps) {
   const location = useLocation();
+  const profile = getUserProfile();
+  const navItems = profile.isAdmin
+    ? [...baseNavItems, { label: "Admin", path: "/admin", icon: Shield }]
+    : baseNavItems;
 
   return (
     <aside
       className={cn(
-        'fixed left-0 top-0 h-screen z-40 flex flex-col transition-all duration-200 bg-sidebar border-r border-sidebar-border',
-        collapsed ? 'w-16' : 'w-56'
+        "fixed left-0 top-0 z-40 flex h-screen flex-col border-r border-sidebar-border bg-sidebar transition-all duration-200",
+        collapsed ? "w-16" : "w-56"
       )}
     >
-      {/* Logo */}
-      <div className="h-14 flex items-center px-4 border-b border-sidebar-border">
+      <div className="flex h-14 items-center border-b border-sidebar-border px-4">
         {!collapsed && (
-          <span className="text-lg font-semibold text-sidebar-primary tracking-tight">
+          <span className="text-lg font-semibold tracking-tight text-sidebar-primary">
             CortexKnows
           </span>
         )}
-        {collapsed && (
-          <span className="text-lg font-bold text-sidebar-primary mx-auto">C</span>
-        )}
+        {collapsed && <span className="mx-auto text-lg font-bold text-sidebar-primary">C</span>}
       </div>
 
-      {/* Nav */}
-      <nav className="flex-1 overflow-y-auto py-3 px-2 space-y-0.5">
+      <nav className="flex-1 space-y-0.5 overflow-y-auto px-2 py-3">
         {navItems.map((item) => {
-          const isActive = location.pathname === item.path ||
-            (item.path !== '/' && location.pathname.startsWith(item.path));
+          const isActive =
+            location.pathname === item.path ||
+            (item.path !== "/" && location.pathname.startsWith(item.path));
 
           return (
             <NavLink
               key={item.path}
               to={item.path}
               className={cn(
-                'sidebar-nav-item',
-                isActive && 'active',
-                collapsed && 'justify-center px-0'
+                "sidebar-nav-item",
+                isActive && "active",
+                collapsed && "justify-center px-0"
               )}
               title={collapsed ? item.label : undefined}
             >
@@ -77,12 +96,15 @@ export function AppSidebar({ collapsed, onToggle }: AppSidebarProps) {
         })}
       </nav>
 
-      {/* Collapse toggle */}
       <button
         onClick={onToggle}
-        className="h-10 flex items-center justify-center border-t border-sidebar-border text-sidebar-muted hover:text-sidebar-primary transition-colors"
+        className="flex h-10 items-center justify-center border-t border-sidebar-border text-sidebar-muted transition-colors hover:text-sidebar-primary"
       >
-        {collapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
+        {collapsed ? (
+          <ChevronRight className="h-4 w-4" />
+        ) : (
+          <ChevronLeft className="h-4 w-4" />
+        )}
       </button>
     </aside>
   );

@@ -242,6 +242,14 @@ export interface WatchlistCreate {
   sources: WatchlistSourceCreate[];
 }
 
+export interface WatchlistUpdate {
+  name?: string;
+  topic?: string;
+  frequency?: string;
+  interval_days?: number | null;
+  description?: string | null;
+}
+
 export interface WatchlistResponse {
   id: number;
   name: string;
@@ -779,6 +787,26 @@ export async function getWatchlists(): Promise<WatchlistResponse[]> {
     );
   }
   return responseData as WatchlistResponse[];
+}
+
+export async function updateWatchlist(
+  id: number,
+  data: WatchlistUpdate
+): Promise<WatchlistResponse> {
+  const res = await fetch(`${API_URL}/watchlists/${id}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  const responseData = await res.json().catch(() => null);
+  if (!res.ok) {
+    throw new Error(
+      responseData?.detail
+        ? String(responseData.detail)
+        : `Failed to update watchlist (${res.status})`
+    );
+  }
+  return responseData as WatchlistResponse;
 }
 
 export async function deleteWatchlist(id: number): Promise<void> {

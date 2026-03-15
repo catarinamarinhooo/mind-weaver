@@ -17,6 +17,8 @@ interface AuthResponse {
 interface UserApiResponse {
   id?: number;
   email: string;
+  is_admin?: boolean;
+  is_active?: boolean;
   nickname: string;
   full_name?: string | null;
   avatar_data_url?: string | null;
@@ -73,10 +75,29 @@ interface MessageResponse {
   message: string;
 }
 
+export interface AdminUserPayload {
+  email: string;
+  password: string;
+  nickname: string;
+  full_name?: string | null;
+  is_admin?: boolean;
+  is_active?: boolean;
+}
+
+export interface AdminUserUpdatePayload {
+  nickname?: string;
+  full_name?: string | null;
+  is_admin?: boolean;
+  is_active?: boolean;
+  password?: string;
+}
+
 function normalizeUser(user: UserApiResponse): UserProfile {
   return {
     id: user.id,
     email: user.email,
+    isAdmin: !!user.is_admin,
+    isActive: user.is_active ?? true,
     workspaceId: user.workspace_id ?? null,
     workspaceName: user.workspace?.name || "Personal Workspace",
     workspaceSlug: user.workspace?.slug || "personal-workspace",
@@ -262,6 +283,62 @@ export async function resetPassword(payload: ResetPasswordPayload) {
     );
   }
   return responseData;
+}
+
+export async function getAdminUsers() {
+  const res = await fetch(`${API_URL}/admin/users`, {
+    credentials: "include",
+  });
+  const responseData = (await res.json().catch(() => null)) as UserApiResponse[] | null;
+  if (!res.ok || !responseData) {
+    throw new Error("Failed to fetch admin users.");
+  }
+  return responseData.map(normalizeUser);
+}
+
+export async function createAdminUser(payload: AdminUserPayload) {
+  const res = await fetch(`${API_URL}/admin/users`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify(payload),
+  });
+  const responseData = (await res.json().catch(() => null)) as UserApiResponse | null;
+  if (!res.ok || !responseData) {
+    throw new Error(
+      (responseData as { detail?: string } | null)?.detail || "Failed to create user."
+    );
+  }
+  return normalizeUser(responseData);
+}
+
+export async function updateAdminUser(id: number, payload: AdminUserUpdatePayload) {
+  const res = await fetch(`${API_URL}/admin/users/${id}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify(payload),
+  });
+  const responseData = (await res.json().catch(() => null)) as UserApiResponse | null;
+  if (!res.ok || !responseData) {
+    throw new Error(
+      (responseData as { detail?: string } | null)?.detail || "Failed to update user."
+    );
+  }
+  return normalizeUser(responseData);
+}
+
+export async function deleteAdminUser(id: number) {
+  const res = await fetch(`${API_URL}/admin/users/${id}`, {
+    method: "DELETE",
+    credentials: "include",
+  });
+  const responseData = (await res.json().catch(() => null)) as MessageResponse | null;
+  if (!res.ok) {
+    throw new Error(
+      (responseData as { detail?: string } | null)?.detail || "Failed to delete user."
+    );
+  }
 }
 
 export function logout() {

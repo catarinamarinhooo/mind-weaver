@@ -120,6 +120,12 @@ def ensure_mvp_schema():
             text("ALTER TABLE users ADD COLUMN IF NOT EXISTS workspace_id INTEGER")
         )
         conn.execute(
+            text("ALTER TABLE users ADD COLUMN IF NOT EXISTS is_admin BOOLEAN DEFAULT FALSE")
+        )
+        conn.execute(
+            text("ALTER TABLE users ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE")
+        )
+        conn.execute(
             text("ALTER TABLE topics DROP CONSTRAINT IF EXISTS topics_name_key"))
         conn.execute(
             text(

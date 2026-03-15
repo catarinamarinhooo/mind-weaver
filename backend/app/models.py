@@ -278,6 +278,8 @@ class User(Base):
     email = Column(String, nullable=False, unique=True, index=True)
     workspace_id = Column(Integer, ForeignKey("workspaces.id"), nullable=True, index=True)
     password_hash = Column(String, nullable=False)
+    is_admin = Column(Boolean, nullable=False, default=False)
+    is_active = Column(Boolean, nullable=False, default=True)
     nickname = Column(String, nullable=False)
     full_name = Column(String, nullable=True)
     avatar_data_url = Column(Text, nullable=True)

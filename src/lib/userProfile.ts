@@ -1,6 +1,8 @@
 export interface UserProfile {
   id?: number;
   email: string;
+  isAdmin?: boolean;
+  isActive?: boolean;
   workspaceId?: number | null;
   workspaceName?: string;
   workspaceSlug?: string;
@@ -19,6 +21,8 @@ const PROFILE_EVENT = "cortexknows-profile-updated";
 
 export const defaultUserProfile: UserProfile = {
   email: "demo@cortexknows.app",
+  isAdmin: false,
+  isActive: true,
   workspaceId: null,
   workspaceName: "Personal Workspace",
   workspaceSlug: "personal-workspace",
@@ -51,6 +55,14 @@ export function getUserProfile(): UserProfile {
         (parsed.workspaceId as number | null | undefined) ??
         (parsed.workspace_id as number | null | undefined) ??
         defaultUserProfile.workspaceId,
+      isAdmin:
+        (parsed.isAdmin as boolean | undefined) ??
+        (parsed.is_admin as boolean | undefined) ??
+        defaultUserProfile.isAdmin,
+      isActive:
+        (parsed.isActive as boolean | undefined) ??
+        (parsed.is_active as boolean | undefined) ??
+        defaultUserProfile.isActive,
       workspaceName:
         (parsed.workspaceName as string | undefined) ||
         ((parsed.workspace as { name?: string } | undefined)?.name as string | undefined) ||

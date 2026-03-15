@@ -22,6 +22,8 @@ import SearchPage from "./pages/SearchPage";
 import AskPage from "./pages/AskPage";
 import UserPage from "./pages/UserPage";
 import UpdatesPage from "./pages/UpdatesPage";
+import RecommendationsPage from "./pages/RecommendationsPage";
+import AdminPage from "./pages/AdminPage";
 import LoginPage from "./pages/LoginPage";
 import NotFound from "./pages/NotFound";
 
@@ -51,10 +53,12 @@ const App = () => (
             <Route path="/watchlists" element={<WatchlistsPage />} />
             <Route path="/discovery" element={<DiscoveryPage />} />
             <Route path="/connections" element={<ConnectionsPage />} />
+            <Route path="/recommendations" element={<RecommendationsPage />} />
             <Route path="/search" element={<SearchPage />} />
             <Route path="/ask" element={<AskPage />} />
             <Route path="/user" element={<UserPage />} />
             <Route path="/updates" element={<UpdatesPage />} />
+            <Route path="/admin" element={<AdminPage />} />
           </Route>
           <Route path="*" element={<NotFound />} />
         </Routes>
