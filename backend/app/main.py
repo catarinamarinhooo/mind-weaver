@@ -73,6 +73,7 @@ SESSION_COOKIE_NAME = "cortexknows_session"
 SESSION_COOKIE_SECURE = (
     os.getenv("SESSION_COOKIE_SECURE", "false").strip().lower() == "true"
 )
+SESSION_COOKIE_SAMESITE = "none" if SESSION_COOKIE_SECURE else "lax"
 MAX_UPLOAD_SIZE_BYTES = 10 * 1024 * 1024
 SESSION_TTL = timedelta(days=30)
 RESET_TOKEN_TTL = timedelta(hours=1)
@@ -146,7 +147,7 @@ def set_session_cookie(response: Response, token: str):
         key=SESSION_COOKIE_NAME,
         value=token,
         httponly=True,
-        samesite="lax",
+        samesite=SESSION_COOKIE_SAMESITE,
         secure=SESSION_COOKIE_SECURE,
         max_age=60 * 60 * 24 * 30,
         path="/",
@@ -157,7 +158,7 @@ def clear_session_cookie(response: Response):
     response.delete_cookie(
         key=SESSION_COOKIE_NAME,
         httponly=True,
-        samesite="lax",
+        samesite=SESSION_COOKIE_SAMESITE,
         secure=SESSION_COOKIE_SECURE,
         path="/",
     )
