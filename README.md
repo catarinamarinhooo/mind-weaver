@@ -489,6 +489,12 @@ Important note about uploads:
 - this MVP currently stores uploads on the application filesystem
 - for stronger production durability, a persistent disk or object storage solution should be used later
 
+Free deployment alternative:
+
+- Hugging Face Spaces using Docker
+
+This is a good zero-cost option for demos and academic presentation because the whole application can run as a single container.
+
 ---
 
 ## Suggested Demo Flow for a Professor
