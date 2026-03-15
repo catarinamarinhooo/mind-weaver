@@ -1,8 +1,9 @@
 import { Download, ExternalLink, FileText, Image, Upload, X } from "lucide-react";
 import type { GlossaryAttachment } from "@/lib/api";
 import { Button } from "@/components/ui/button";
+import { getApiBaseUrl } from "@/lib/config";
 
-const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:8000";
+const API_BASE = getApiBaseUrl();
 
 function getAttachmentUrl(url: string) {
   return `${API_BASE}${url}`;

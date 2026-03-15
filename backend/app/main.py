@@ -4,6 +4,7 @@ from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from pathlib import Path
+import os
 import json
 import shutil
 import uuid
@@ -65,9 +66,12 @@ import app.models as models
 app = FastAPI()
 BASE_DIR = Path(__file__).resolve().parent.parent
 UPLOADS_DIR = BASE_DIR / "uploads"
+FRONTEND_DIST_DIR = BASE_DIR / "dist"
 UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
 SESSION_COOKIE_NAME = "cortexknows_session"
-SESSION_COOKIE_SECURE = False
+SESSION_COOKIE_SECURE = (
+    os.getenv("SESSION_COOKIE_SECURE", "false").strip().lower() == "true"
+)
 MAX_UPLOAD_SIZE_BYTES = 10 * 1024 * 1024
 SESSION_TTL = timedelta(days=30)
 RESET_TOKEN_TTL = timedelta(hours=1)
@@ -83,12 +87,17 @@ ALLOWED_UPLOAD_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".gif", ".pdf", "
 SAFE_INLINE_CONTENT_TYPES = {"image/jpeg", "image/png", "image/webp", "image/gif"}
 RATE_LIMIT_STORAGE: dict[str, list[float]] = {}
 
+allowed_origins = [
+    "http://localhost:8080",
+    "http://127.0.0.1:8080",
+]
+frontend_url = os.getenv("FRONTEND_URL", "").strip()
+if frontend_url:
+    allowed_origins.append(frontend_url)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:8080",
-        "http://127.0.0.1:8080",
-    ],
+    allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -2338,3 +2347,21 @@ def save_discovery_item_to_library(
     db.commit()
     db.refresh(knowledge_item)
     return serialize_knowledge_item(knowledge_item)
+
+
+@app.get("/{full_path:path}", include_in_schema=False)
+def serve_frontend(full_path: str):
+    if not FRONTEND_DIST_DIR.exists():
+        raise HTTPException(status_code=404, detail="Frontend build not found")
+
+    requested_path = (FRONTEND_DIST_DIR / full_path).resolve()
+    dist_root = FRONTEND_DIST_DIR.resolve()
+
+    if dist_root in requested_path.parents and requested_path.exists() and requested_path.is_file():
+        return FileResponse(requested_path)
+
+    index_path = FRONTEND_DIST_DIR / "index.html"
+    if index_path.exists():
+        return FileResponse(index_path)
+
+    raise HTTPException(status_code=404, detail="Frontend entrypoint not found")

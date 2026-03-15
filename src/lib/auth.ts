@@ -1,6 +1,7 @@
 import { clearUserProfile, saveUserProfile, type UserProfile } from "@/lib/userProfile";
+import { getApiBaseUrl } from "@/lib/config";
 
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
+const API_URL = getApiBaseUrl();
 const AUTH_KEY = "cortexknows_auth_session";
 const AUTH_EVENT = "cortexknows-auth-updated";
 

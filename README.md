@@ -454,6 +454,43 @@ The project is configured to use Neon PostgreSQL.
 
 ---
 
+## Deployment
+
+The project is prepared for a simple production deployment using a single Docker-based web service.
+
+Recommended deployment approach:
+
+- Neon PostgreSQL for the database
+- Render Web Service for the application
+- one service serving both frontend and backend from the same domain
+
+This approach was chosen because:
+
+- authentication uses secure session cookies
+- serving frontend and backend from the same origin avoids cross-site cookie issues
+- deployment is simpler than managing separate frontend and backend hosts
+- the backend scheduler can run inside the same service
+
+Deployment-related files included in this repository:
+
+- [`Dockerfile`](/c:/Users/icmarinho/Desktop/projectos-github/Mindweaver%20-%20Lovable/mind-weaver/Dockerfile)
+- [`.dockerignore`](/c:/Users/icmarinho/Desktop/projectos-github/Mindweaver%20-%20Lovable/mind-weaver/.dockerignore)
+- [`render.yaml`](/c:/Users/icmarinho/Desktop/projectos-github/Mindweaver%20-%20Lovable/mind-weaver/render.yaml)
+- [`backend/.env.example`](/c:/Users/icmarinho/Desktop/projectos-github/Mindweaver%20-%20Lovable/mind-weaver/backend/.env.example)
+
+Important production environment variables:
+
+- `DATABASE_URL`
+- `FRONTEND_URL`
+- `SESSION_COOKIE_SECURE=true`
+
+Important note about uploads:
+
+- this MVP currently stores uploads on the application filesystem
+- for stronger production durability, a persistent disk or object storage solution should be used later
+
+---
+
 ## Suggested Demo Flow for a Professor
 
 If someone wants to understand the system quickly, this is the best path:

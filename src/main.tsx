@@ -2,8 +2,9 @@ import { createRoot } from "react-dom/client";
 import App from "./App.tsx";
 import "./index.css";
 import { logout } from "./lib/auth";
+import { getApiBaseUrl } from "./lib/config";
 
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
+const API_URL = getApiBaseUrl();
 const originalFetch = window.fetch.bind(window);
 
 window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
