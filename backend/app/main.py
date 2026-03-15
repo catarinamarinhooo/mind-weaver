@@ -64,9 +64,10 @@ from app.db import engine, test_db, Base, SessionLocal, ensure_mvp_schema
 import app.models as models
 
 app = FastAPI()
-BASE_DIR = Path(__file__).resolve().parent.parent
-UPLOADS_DIR = BASE_DIR / "uploads"
-FRONTEND_DIST_DIR = BASE_DIR / "dist"
+BACKEND_DIR = Path(__file__).resolve().parents[1]
+PROJECT_ROOT = BACKEND_DIR.parent
+UPLOADS_DIR = Path(os.getenv("UPLOADS_DIR", str(BACKEND_DIR / "uploads")))
+FRONTEND_DIST_DIR = PROJECT_ROOT / "dist"
 UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
 SESSION_COOKIE_NAME = "cortexknows_session"
 SESSION_COOKIE_SECURE = (
@@ -749,6 +750,9 @@ def stop_scheduler():
 
 @app.get("/")
 def read_root():
+    index_path = FRONTEND_DIST_DIR / "index.html"
+    if index_path.exists():
+        return FileResponse(index_path)
     return {"message": "CortexKnows backend running"}
 
 
