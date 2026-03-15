@@ -1,3 +1,13 @@
+---
+title: CortexKnows
+emoji: brain
+colorFrom: blue
+colorTo: indigo
+sdk: docker
+app_port: 7860
+pinned: false
+---
+
 # CortexKnows
 
 ## Overview
@@ -494,6 +504,17 @@ Free deployment alternative:
 - Hugging Face Spaces using Docker
 
 This is a good zero-cost option for demos and academic presentation because the whole application can run as a single container.
+
+Quick Hugging Face Spaces setup:
+
+1. Create a new Space
+2. Choose `Docker` as the SDK
+3. Push this repository content to the Space repository
+4. Add these Space secrets or variables:
+   - `DATABASE_URL`
+   - `FRONTEND_URL`
+   - `SESSION_COOKIE_SECURE=true`
+   - `UPLOADS_DIR=/app/backend/uploads`
 
 ---
 
