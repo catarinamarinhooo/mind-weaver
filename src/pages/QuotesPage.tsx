@@ -1,21 +1,53 @@
-import { useState } from 'react';
-import { PageHeader } from '@/components/shared/PageHeader';
-import { ContentCard } from '@/components/shared/ContentCard';
-import { TopicTag } from '@/components/shared/TopicTag';
-import { AISuggestionBox } from '@/components/shared/AISuggestionBox';
-import { Button } from '@/components/ui/button';
-import { Plus, ArrowLeft, ArrowRight, Quote as QuoteIcon } from 'lucide-react';
-
-const mockQuotes = [
-  { id: '1', bookTitle: 'Atomic Habits', text: 'You do not rise to the level of your goals. You fall to the level of your systems.', page: 27, thoughts: 'This applies perfectly to knowledge management — need systems, not just intentions.', topics: ['Habits', 'Productivity'] },
-  { id: '2', bookTitle: 'The Pragmatic Programmer', text: 'Don\'t live with broken windows. Fix each one as soon as it is discovered.', page: 14, thoughts: 'Technical debt metaphor that applies broadly to life.', topics: ['Engineering', 'Quality'] },
-  { id: '3', bookTitle: 'Thinking, Fast and Slow', text: 'A reliable way to make people believe in falsehoods is frequent repetition, because familiarity is not easily distinguished from truth.', page: 62, thoughts: undefined, topics: ['Psychology', 'Decision Making'] },
-  { id: '4', bookTitle: 'Deep Work', text: 'The ability to perform deep work is becoming increasingly rare at exactly the same time it is becoming increasingly valuable.', page: 14, thoughts: 'This is why I need to protect my focus time.', topics: ['Productivity', 'Focus'] },
-];
+import { useEffect, useState } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import { PageHeader } from "@/components/shared/PageHeader";
+import { AttachmentPreviewList } from "@/components/shared/AttachmentPreviewList";
+import { ContentCard } from "@/components/shared/ContentCard";
+import { ConnectionsPanel } from "@/components/shared/ConnectionsPanel";
+import { ConnectionSuggestionsPanel } from "@/components/shared/ConnectionSuggestionsPanel";
+import { EmptyState } from "@/components/shared/EmptyState";
+import { Button } from "@/components/ui/button";
+import { deleteQuote, getQuotes, type QuoteResponse } from "@/lib/api";
+import { ArrowLeft, Pencil, Plus, Quote as QuoteIcon, Trash2 } from "lucide-react";
 
 const QuotesPage = () => {
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const quote = mockQuotes.find(q => q.id === selectedId);
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const [quotes, setQuotes] = useState<QuoteResponse[]>([]);
+  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [isDeletingId, setIsDeletingId] = useState<number | null>(null);
+  const quote = quotes.find((item) => item.id === selectedId);
+
+  useEffect(() => {
+    async function loadQuotes() {
+      try {
+        setLoading(true);
+        setError("");
+        setQuotes(await getQuotes());
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Failed to load quotes.");
+      } finally {
+        setLoading(false);
+      }
+    }
+    void loadQuotes();
+  }, []);
+
+  const handleDelete = async (id: number) => {
+    if (!window.confirm("Are you sure you want to delete this quote?")) return;
+    try {
+      setIsDeletingId(id);
+      await deleteQuote(id);
+      setQuotes((current) => current.filter((item) => item.id !== id));
+      if (selectedId === id) setSelectedId(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to delete quote.");
+    } finally {
+      setIsDeletingId(null);
+    }
+  };
 
   if (quote) {
     return (
@@ -23,53 +55,97 @@ const QuotesPage = () => {
         <Button variant="ghost" size="sm" onClick={() => setSelectedId(null)} className="mb-4 gap-2 text-muted-foreground">
           <ArrowLeft className="h-3.5 w-3.5" /> Back
         </Button>
-        <div className="glass-card p-8 mb-6">
-          <QuoteIcon className="h-8 w-8 text-accent/30 mb-4" />
-          <blockquote className="text-lg text-foreground leading-relaxed italic">
-            "{quote.text}"
+
+        <div className="mb-4 flex justify-end gap-2">
+          <Button variant="outline" size="sm" className="gap-2" onClick={() => navigate(`/capture?type=quote&mode=edit&id=${quote.id}`)}>
+            <Pencil className="h-3.5 w-3.5" /> Edit
+          </Button>
+          <Button variant="outline" size="sm" className="gap-2" disabled={isDeletingId === quote.id} onClick={() => void handleDelete(quote.id)}>
+            <Trash2 className="h-3.5 w-3.5" /> {isDeletingId === quote.id ? "Deleting..." : "Delete"}
+          </Button>
+        </div>
+
+        <div className="mb-6 glass-card p-8">
+          <QuoteIcon className="mb-4 h-8 w-8 text-accent/30" />
+          <blockquote className="text-lg italic leading-relaxed text-foreground">
+            "{quote.quote_text}"
           </blockquote>
           <div className="mt-4 flex items-center gap-2">
-            <span className="text-sm font-medium text-foreground">{quote.bookTitle}</span>
-            {quote.page && <span className="text-xs text-muted-foreground">· p. {quote.page}</span>}
+            <span className="text-sm font-medium text-foreground">{quote.book_title}</span>
+            {quote.page && <span className="text-xs text-muted-foreground">p. {quote.page}</span>}
           </div>
         </div>
 
         {quote.thoughts && (
-          <div className="glass-card p-4 mb-4">
-            <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">My Thoughts</h3>
+          <ContentCard hover={false}>
+            <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">My Thoughts</h3>
             <p className="text-sm text-foreground">{quote.thoughts}</p>
+          </ContentCard>
+        )}
+
+        {quote.attachments.length > 0 && (
+          <div className="mt-4">
+            <AttachmentPreviewList title="Source Photo / Document" attachments={quote.attachments} />
           </div>
         )}
 
-        <div className="flex gap-2 mb-6">{quote.topics.map(t => <TopicTag key={t} name={t} />)}</div>
+        <div className="mt-6">
+          <ConnectionsPanel sourceType="quote" sourceId={quote.id} />
+        </div>
 
-        <AISuggestionBox>
-          <p className="flex items-center gap-2"><ArrowRight className="h-3 w-3 text-accent" /> This quote connects to your thought on "knowledge compounding"</p>
-        </AISuggestionBox>
+        <div className="mt-6">
+          <ConnectionSuggestionsPanel
+            source={{
+              id: quote.id,
+              type: "quote",
+              label: quote.book_title,
+              text: [quote.book_title, quote.quote_text, quote.page, quote.thoughts]
+                .filter(Boolean)
+                .join(" "),
+            }}
+          />
+        </div>
       </div>
     );
   }
 
   return (
     <div className="max-w-4xl mx-auto">
-      <PageHeader title="Quotes" description="Collected wisdom from books" actions={<Button size="sm" className="gap-2"><Plus className="h-3.5 w-3.5" /> Add Quote</Button>} />
-      <div className="space-y-3">
-        {mockQuotes.map((q) => (
-          <ContentCard key={q.id} onClick={() => setSelectedId(q.id)}>
-            <div className="flex items-start gap-3">
-              <QuoteIcon className="h-4 w-4 text-accent/50 shrink-0 mt-0.5" />
-              <div className="flex-1 min-w-0">
-                <p className="text-sm text-foreground italic line-clamp-2">"{q.text}"</p>
-                <div className="flex items-center gap-2 mt-2">
-                  <span className="text-xs font-medium text-foreground">{q.bookTitle}</span>
-                  {q.page && <span className="text-xs text-muted-foreground">· p. {q.page}</span>}
-                  {q.topics.map(t => <TopicTag key={t} name={t} />)}
+      <PageHeader title="Quotes" description="Quotes stored in your real backend" actions={<Button size="sm" className="gap-2" onClick={() => navigate("/capture?type=quote")}><Plus className="h-3.5 w-3.5" /> Add Quote</Button>} />
+      {searchParams.get("saved") === "quote" && <div className="mb-4 rounded-md border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-700">Quote saved successfully.</div>}
+      {searchParams.get("updated") === "quote" && <div className="mb-4 rounded-md border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-700">Quote updated successfully.</div>}
+      {loading && <div className="text-sm text-muted-foreground">Loading quotes...</div>}
+      {!loading && error && <div className="text-sm text-red-500">{error}</div>}
+      {!loading && !error && quotes.length === 0 ? (
+        <EmptyState icon={<QuoteIcon className="h-10 w-10" />} title="No quotes yet" description="Capture your first quote to start this section." action={<Button onClick={() => navigate("/capture?type=quote")}>Open Capture</Button>} />
+      ) : (
+        <div className="space-y-3">
+          {quotes.map((item) => (
+            <ContentCard key={item.id} onClick={() => setSelectedId(item.id)}>
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex min-w-0 flex-1 items-start gap-3">
+                  <QuoteIcon className="mt-0.5 h-4 w-4 shrink-0 text-accent/50" />
+                  <div className="min-w-0 flex-1">
+                    <p className="line-clamp-2 text-sm italic text-foreground">"{item.quote_text}"</p>
+                    <div className="mt-2 flex items-center gap-2">
+                      <span className="text-xs font-medium text-foreground">{item.book_title}</span>
+                      {item.page && <span className="text-xs text-muted-foreground">p. {item.page}</span>}
+                    </div>
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <Button variant="outline" size="sm" className="gap-2" onClick={(event) => { event.stopPropagation(); navigate(`/capture?type=quote&mode=edit&id=${item.id}`); }}>
+                    <Pencil className="h-3.5 w-3.5" /> Edit
+                  </Button>
+                  <Button variant="outline" size="sm" className="gap-2" disabled={isDeletingId === item.id} onClick={(event) => { event.stopPropagation(); void handleDelete(item.id); }}>
+                    <Trash2 className="h-3.5 w-3.5" /> {isDeletingId === item.id ? "Deleting..." : "Delete"}
+                  </Button>
                 </div>
               </div>
-            </div>
-          </ContentCard>
-        ))}
-      </div>
+            </ContentCard>
+          ))}
+        </div>
+      )}
     </div>
   );
 };

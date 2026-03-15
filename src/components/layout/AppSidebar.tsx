@@ -2,7 +2,7 @@ import { NavLink, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard, PenLine, Library, Brain, Lightbulb,
   Briefcase, Heart, Hash, BookOpen, Eye, Compass,
-  Search, MessageCircle, Quote, ChevronLeft, ChevronRight,
+  Search, MessageCircle, Quote, ChevronLeft, ChevronRight, GitBranch, Bell,
 } from 'lucide-react';
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
@@ -20,6 +20,8 @@ const navItems = [
   { label: 'Quotes', path: '/quotes', icon: Quote },
   { label: 'Watchlists', path: '/watchlists', icon: Eye },
   { label: 'Discovery', path: '/discovery', icon: Compass },
+  { label: 'Updates', path: '/updates', icon: Bell },
+  { label: 'Connections', path: '/connections', icon: GitBranch },
   { label: 'Search', path: '/search', icon: Search },
   { label: 'Ask AI', path: '/ask', icon: MessageCircle },
 ];
@@ -43,7 +45,7 @@ export function AppSidebar({ collapsed, onToggle }: AppSidebarProps) {
       <div className="h-14 flex items-center px-4 border-b border-sidebar-border">
         {!collapsed && (
           <span className="text-lg font-semibold text-sidebar-primary tracking-tight">
-            Cortex
+            CortexKnows
           </span>
         )}
         {collapsed && (

@@ -8,9 +8,34 @@ pnpm-debug.log*
 lerna-debug.log*
 
 node_modules
+.venv/
+venv/
+env/
 dist
 dist-ssr
 *.local
+coverage/
+htmlcov/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+!backend/.env.example
+
+# Python / backend
+backend/uploads/
+backend/*.sqlite3
+backend/*.db
+
+# OS / misc
+Thumbs.db
 
 # Editor directories and files
 .vscode/*

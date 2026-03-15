@@ -1,79 +1,267 @@
-import { useState } from 'react';
-import { PageHeader } from '@/components/shared/PageHeader';
-import { ContentCard } from '@/components/shared/ContentCard';
-import { TopicTag } from '@/components/shared/TopicTag';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Plus, ArrowLeft, Hash } from 'lucide-react';
-
-const mockTopics = [
-  { id: '1', name: 'Machine Learning', description: 'Artificial intelligence and deep learning concepts.', itemCount: 24, relatedTopics: ['AI', 'Data Science'], subtopics: ['NLP', 'Computer Vision', 'Reinforcement Learning'] },
-  { id: '2', name: 'Productivity', description: 'Methods and tools for personal and professional effectiveness.', itemCount: 18, relatedTopics: ['Habits', 'Time Management'], subtopics: ['GTD', 'Deep Work'] },
-  { id: '3', name: 'SaaS', description: 'Software as a Service business models and strategies.', itemCount: 15, relatedTopics: ['Startups', 'Growth'], subtopics: ['Pricing', 'Churn', 'PLG'] },
-  { id: '4', name: 'Personal Finance', description: 'Money management, investing, and financial independence.', itemCount: 12, relatedTopics: ['Investing', 'Budgeting'], subtopics: [] },
-  { id: '5', name: 'Engineering', description: 'Software engineering practices and architecture.', itemCount: 21, relatedTopics: ['DevOps', 'Architecture'], subtopics: ['API Design', 'Testing', 'CI/CD'] },
-];
+import { useEffect, useState } from "react";
+import { PageHeader } from "@/components/shared/PageHeader";
+import { ContentCard } from "@/components/shared/ContentCard";
+import { TopicTag } from "@/components/shared/TopicTag";
+import { EmptyState } from "@/components/shared/EmptyState";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  createTopic,
+  deleteTopic,
+  getTopics,
+  updateTopic,
+  type TopicResponse,
+} from "@/lib/api";
+import { Plus, ArrowLeft, Hash, Pencil, Trash2 } from "lucide-react";
 
 const TopicsPage = () => {
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const topic = mockTopics.find(t => t.id === selectedId);
+  const [topics, setTopics] = useState<TopicResponse[]>([]);
+  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [isCreating, setIsCreating] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [isDeletingId, setIsDeletingId] = useState<number | null>(null);
+  const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
+  const topic = topics.find((item) => item.id === selectedId);
+
+  useEffect(() => {
+    async function loadTopics() {
+      try {
+        setLoading(true);
+        setError("");
+        setTopics(await getTopics());
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Failed to load topics.");
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    void loadTopics();
+  }, []);
+
+  const resetForm = () => {
+    setName("");
+    setDescription("");
+    setIsCreating(false);
+    setIsEditing(false);
+  };
+
+  const handleCreate = async () => {
+    if (!name.trim()) {
+      setError("Topic name is required.");
+      return;
+    }
+
+    try {
+      setError("");
+      const newTopic = await createTopic({
+        name: name.trim(),
+        description: description.trim() || null,
+      });
+      setTopics((current) => [...current, newTopic].sort((a, b) => a.name.localeCompare(b.name)));
+      resetForm();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to create topic.");
+    }
+  };
+
+  const handleUpdate = async () => {
+    if (!topic || !name.trim()) {
+      setError("Topic name is required.");
+      return;
+    }
+
+    try {
+      setError("");
+      const updatedTopic = await updateTopic(topic.id, {
+        name: name.trim(),
+        description: description.trim() || null,
+      });
+      setTopics((current) =>
+        current
+          .map((item) => (item.id === updatedTopic.id ? updatedTopic : item))
+          .sort((a, b) => a.name.localeCompare(b.name))
+      );
+      setSelectedId(updatedTopic.id);
+      resetForm();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to update topic.");
+    }
+  };
+
+  const handleDelete = async (topicId: number) => {
+    if (!window.confirm("Are you sure you want to delete this topic?")) {
+      return;
+    }
+
+    try {
+      setIsDeletingId(topicId);
+      await deleteTopic(topicId);
+      setTopics((current) => current.filter((item) => item.id !== topicId));
+      if (selectedId === topicId) {
+        setSelectedId(null);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to delete topic.");
+    } finally {
+      setIsDeletingId(null);
+    }
+  };
 
   if (topic) {
     return (
       <div className="max-w-3xl mx-auto">
-        <Button variant="ghost" size="sm" onClick={() => setSelectedId(null)} className="mb-4 gap-2 text-muted-foreground">
+        <Button variant="ghost" size="sm" onClick={() => { setSelectedId(null); resetForm(); }} className="mb-4 gap-2 text-muted-foreground">
           <ArrowLeft className="h-3.5 w-3.5" /> Back
         </Button>
-        <div className="flex items-center gap-3 mb-2">
-          <Hash className="h-6 w-6 text-accent" />
-          <h1 className="text-2xl font-semibold text-foreground">{topic.name}</h1>
-        </div>
-        <p className="text-sm text-muted-foreground mb-6">{topic.description}</p>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-          <div className="glass-card p-4">
-            <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Subtopics</h3>
-            <div className="flex flex-wrap gap-2">
-              {topic.subtopics.length > 0 ? topic.subtopics.map(s => <TopicTag key={s} name={s} />) : <span className="text-sm text-muted-foreground">None yet</span>}
+
+        <div className="mb-6 flex items-start justify-between gap-4">
+          <div>
+            <div className="mb-2 flex items-center gap-3">
+              <Hash className="h-6 w-6 text-accent" />
+              <h1 className="text-2xl font-semibold text-foreground">{topic.name}</h1>
             </div>
+            <p className="text-sm text-muted-foreground">
+              {topic.description || "No description yet."}
+            </p>
           </div>
-          <div className="glass-card p-4">
-            <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Related Topics</h3>
-            <div className="flex flex-wrap gap-2">
-              {topic.relatedTopics.map(r => <TopicTag key={r} name={r} />)}
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-2"
+              onClick={() => {
+                setIsEditing(true);
+                setName(topic.name);
+                setDescription(topic.description || "");
+              }}
+            >
+              <Pencil className="h-3.5 w-3.5" /> Edit
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-2"
+              disabled={isDeletingId === topic.id}
+              onClick={() => void handleDelete(topic.id)}
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+              {isDeletingId === topic.id ? "Deleting..." : "Delete"}
+            </Button>
+          </div>
+        </div>
+
+        <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-3">
+          <ContentCard hover={false}>
+            <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Thoughts
             </div>
-          </div>
+            <div className="mt-2 text-2xl font-semibold text-foreground">
+              {topic.thought_count}
+            </div>
+          </ContentCard>
+          <ContentCard hover={false}>
+            <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Knowledge Items
+            </div>
+            <div className="mt-2 text-2xl font-semibold text-foreground">
+              {topic.knowledge_item_count}
+            </div>
+          </ContentCard>
+          <ContentCard hover={false}>
+            <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Total Linked
+            </div>
+            <div className="mt-2 text-2xl font-semibold text-foreground">
+              {topic.total_count}
+            </div>
+          </ContentCard>
         </div>
-        <div className="glass-card p-4">
-          <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Linked Items</h3>
-          <p className="text-sm text-muted-foreground">{topic.itemCount} items linked to this topic</p>
-        </div>
-        <div className="flex gap-2 mt-4">
-          <Button variant="outline" size="sm">Edit Topic</Button>
-          <Button variant="outline" size="sm">Merge Topics</Button>
-          <Button variant="outline" size="sm">Create Subtopic</Button>
-        </div>
+
+        {isEditing && (
+          <ContentCard hover={false} className="space-y-4">
+            <div className="text-sm font-medium text-foreground">Edit Topic</div>
+            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Topic name" />
+            <Textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Topic description" rows={3} />
+            <div className="flex gap-2">
+              <Button onClick={() => void handleUpdate()}>Save Changes</Button>
+              <Button variant="outline" onClick={resetForm}>Cancel</Button>
+            </div>
+          </ContentCard>
+        )}
       </div>
     );
   }
 
   return (
     <div className="max-w-5xl mx-auto">
-      <PageHeader title="Topics" description="Organize knowledge by topic" actions={<Button size="sm" className="gap-2"><Plus className="h-3.5 w-3.5" /> New Topic</Button>} />
-      <div className="content-grid">
-        {mockTopics.map((topic) => (
-          <ContentCard key={topic.id} onClick={() => setSelectedId(topic.id)}>
-            <div className="flex items-center gap-2 mb-2">
-              <Hash className="h-4 w-4 text-accent" />
-              <h3 className="text-sm font-semibold text-foreground">{topic.name}</h3>
-              <Badge variant="secondary" className="ml-auto text-xs">{topic.itemCount}</Badge>
-            </div>
-            <p className="text-sm text-muted-foreground line-clamp-2 mb-2">{topic.description}</p>
-            <div className="flex flex-wrap gap-1">
-              {topic.relatedTopics.map(r => <TopicTag key={r} name={r} />)}
-            </div>
-          </ContentCard>
-        ))}
-      </div>
+      <PageHeader
+        title="Topics"
+        description="Organize your knowledge by topic"
+        actions={
+          <Button
+            size="sm"
+            className="gap-2"
+            onClick={() => {
+              resetForm();
+              setIsCreating(true);
+            }}
+          >
+            <Plus className="h-3.5 w-3.5" /> New Topic
+          </Button>
+        }
+      />
+
+      {error && <div className="mb-4 text-sm text-red-500">{error}</div>}
+
+      {isCreating && (
+        <ContentCard hover={false} className="mb-6 space-y-4">
+          <div className="text-sm font-medium text-foreground">Create Topic</div>
+          <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Topic name" />
+          <Textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Topic description" rows={3} />
+          <div className="flex gap-2">
+            <Button onClick={() => void handleCreate()}>Create Topic</Button>
+            <Button variant="outline" onClick={resetForm}>Cancel</Button>
+          </div>
+        </ContentCard>
+      )}
+
+      {loading && <div className="text-sm text-muted-foreground">Loading topics...</div>}
+
+      {!loading && topics.length === 0 ? (
+        <EmptyState
+          icon={<Hash className="h-10 w-10" />}
+          title="No topics yet"
+          description="Create your first topic so you can start organizing thoughts and knowledge items."
+          action={<Button onClick={() => setIsCreating(true)}>Create Topic</Button>}
+        />
+      ) : (
+        <div className="content-grid">
+          {topics.map((item) => (
+            <ContentCard key={item.id} onClick={() => setSelectedId(item.id)}>
+              <div className="mb-2 flex items-center gap-2">
+                <Hash className="h-4 w-4 text-accent" />
+                <h3 className="text-sm font-semibold text-foreground">{item.name}</h3>
+                <Badge variant="secondary" className="ml-auto text-xs">
+                  {item.total_count}
+                </Badge>
+              </div>
+              <p className="mb-3 line-clamp-2 text-sm text-muted-foreground">
+                {item.description || "No description yet."}
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <TopicTag name={`${item.thought_count} thoughts`} />
+                <TopicTag name={`${item.knowledge_item_count} knowledge`} />
+              </div>
+            </ContentCard>
+          ))}
+        </div>
+      )}
     </div>
   );
 };

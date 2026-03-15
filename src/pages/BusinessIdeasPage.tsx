@@ -1,29 +1,71 @@
-import { useState } from 'react';
-import { PageHeader } from '@/components/shared/PageHeader';
-import { ContentCard } from '@/components/shared/ContentCard';
-import { PriorityBadge } from '@/components/shared/PriorityBadge';
-import { TopicTag } from '@/components/shared/TopicTag';
-import { AISuggestionBox } from '@/components/shared/AISuggestionBox';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Plus, ArrowLeft, ArrowRight, Sparkles } from 'lucide-react';
+import { useEffect, useState } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import { PageHeader } from "@/components/shared/PageHeader";
+import { AttachmentPreviewList } from "@/components/shared/AttachmentPreviewList";
+import { ContentCard } from "@/components/shared/ContentCard";
+import { ConnectionsPanel } from "@/components/shared/ConnectionsPanel";
+import { ConnectionSuggestionsPanel } from "@/components/shared/ConnectionSuggestionsPanel";
+import { EmptyState } from "@/components/shared/EmptyState";
+import { TopicTag } from "@/components/shared/TopicTag";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import {
+  deleteBusinessIdea,
+  getBusinessIdeas,
+  type BusinessIdeaResponse,
+} from "@/lib/api";
+import { ArrowLeft, Lightbulb, Pencil, Plus, Trash2 } from "lucide-react";
 
-const mockIdeas = [
-  { id: '1', title: 'AI-powered recipe planner', description: 'Personalized meal planning using dietary preferences and grocery availability.', problem: 'People waste time and money on unplanned meals.', audience: 'Health-conscious professionals', category: 'FoodTech', priority: 'high' as const, stage: 'validation', potentialScore: 85, insights: 'Market growing 15% YoY', topics: ['AI', 'Health'] },
-  { id: '2', title: 'Smart home energy optimizer', description: 'ML-based system to reduce home energy consumption.', problem: 'Rising energy costs and environmental impact.', audience: 'Homeowners', category: 'CleanTech', priority: 'high' as const, stage: 'concept', potentialScore: 72, insights: 'Government incentives increasing', topics: ['IoT', 'Sustainability'] },
-  { id: '3', title: 'Freelancer invoice automation', description: 'Automated invoicing and payment tracking for freelancers.', problem: 'Manual invoicing wastes hours monthly.', audience: 'Freelancers', category: 'FinTech', priority: 'medium' as const, stage: 'concept', potentialScore: 68, insights: 'Gig economy expanding rapidly', topics: ['SaaS', 'Finance'] },
-];
-
-const stageColors: Record<string, string> = {
-  concept: 'bg-muted text-muted-foreground',
-  validation: 'bg-priority-medium/10 text-priority-medium',
-  development: 'bg-accent/10 text-accent',
-  launched: 'bg-priority-low/10 text-priority-low',
+const priorityColors: Record<string, string> = {
+  high: "bg-priority-high/10 text-priority-high",
+  medium: "bg-priority-medium/10 text-priority-medium",
+  low: "bg-priority-low/10 text-priority-low",
 };
 
 const BusinessIdeasPage = () => {
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const idea = mockIdeas.find(i => i.id === selectedId);
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const [ideas, setIdeas] = useState<BusinessIdeaResponse[]>([]);
+  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [isDeletingId, setIsDeletingId] = useState<number | null>(null);
+  const idea = ideas.find((item) => item.id === selectedId);
+
+  useEffect(() => {
+    async function loadIdeas() {
+      try {
+        setLoading(true);
+        setError("");
+        setIdeas(await getBusinessIdeas());
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Failed to load business ideas.");
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    void loadIdeas();
+  }, []);
+
+  const handleDelete = async (id: number) => {
+    if (!window.confirm("Are you sure you want to delete this business idea?")) {
+      return;
+    }
+
+    try {
+      setIsDeletingId(id);
+      await deleteBusinessIdea(id);
+      setIdeas((current) => current.filter((item) => item.id !== id));
+      if (selectedId === id) {
+        setSelectedId(null);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to delete business idea.");
+    } finally {
+      setIsDeletingId(null);
+    }
+  };
 
   if (idea) {
     return (
@@ -31,41 +73,61 @@ const BusinessIdeasPage = () => {
         <Button variant="ghost" size="sm" onClick={() => setSelectedId(null)} className="mb-4 gap-2 text-muted-foreground">
           <ArrowLeft className="h-3.5 w-3.5" /> Back
         </Button>
-        <div className="flex items-start justify-between mb-6">
+
+        <div className="mb-6 flex items-start justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-semibold text-foreground">{idea.title}</h1>
-            <div className="flex items-center gap-2 mt-2">
-              <PriorityBadge priority={idea.priority} />
-              <Badge className={stageColors[idea.stage]}>{idea.stage}</Badge>
-              <span className="text-sm text-muted-foreground">Score: {idea.potentialScore}/100</span>
-            </div>
+            <h1 className="mb-2 text-2xl font-semibold text-foreground">{idea.title}</h1>
+            <Badge className={priorityColors[idea.priority || "medium"] || priorityColors.medium}>
+              {idea.priority || "medium"}
+            </Badge>
           </div>
-          <Button size="sm" className="gap-2"><Sparkles className="h-3.5 w-3.5" /> Develop this idea</Button>
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" className="gap-2" onClick={() => navigate(`/capture?type=business&mode=edit&id=${idea.id}`)}>
+              <Pencil className="h-3.5 w-3.5" /> Edit
+            </Button>
+            <Button variant="outline" size="sm" className="gap-2" disabled={isDeletingId === idea.id} onClick={() => void handleDelete(idea.id)}>
+              <Trash2 className="h-3.5 w-3.5" /> {isDeletingId === idea.id ? "Deleting..." : "Delete"}
+            </Button>
+          </div>
         </div>
 
         <div className="space-y-4">
-          {[
-            { label: 'Problem', value: idea.problem },
-            { label: 'Audience', value: idea.audience },
-            { label: 'Description', value: idea.description },
-            { label: 'Insights', value: idea.insights },
-          ].map(({ label, value }) => value && (
-            <div key={label} className="glass-card p-4">
-              <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">{label}</h3>
-              <p className="text-sm text-foreground">{value}</p>
-            </div>
-          ))}
+          {idea.description && <ContentCard hover={false}><h3 className="mb-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Description</h3><p className="text-sm text-foreground">{idea.description}</p></ContentCard>}
+          {idea.problem && <ContentCard hover={false}><h3 className="mb-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Problem</h3><p className="text-sm text-foreground">{idea.problem}</p></ContentCard>}
+          {idea.audience && <ContentCard hover={false}><h3 className="mb-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Audience</h3><p className="text-sm text-foreground">{idea.audience}</p></ContentCard>}
+          {idea.next_steps && <ContentCard hover={false}><h3 className="mb-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Next Steps</h3><p className="text-sm text-foreground">{idea.next_steps}</p></ContentCard>}
         </div>
 
-        <div className="flex gap-2 mt-4 flex-wrap">
-          {idea.topics.map(t => <TopicTag key={t} name={t} />)}
+        {idea.topics.length > 0 && (
+          <div className="mt-4 flex flex-wrap gap-2">
+            {idea.topics.map((topic) => (
+              <TopicTag key={topic.id} name={topic.name} variant="topic" />
+            ))}
+          </div>
+        )}
+
+        {idea.attachments.length > 0 && (
+          <div className="mt-4">
+            <AttachmentPreviewList title="Images and Files" attachments={idea.attachments} />
+          </div>
+        )}
+
+        <div className="mt-6">
+          <ConnectionsPanel sourceType="business_idea" sourceId={idea.id} />
         </div>
 
         <div className="mt-6">
-          <AISuggestionBox>
-            <p className="flex items-center gap-2"><ArrowRight className="h-3 w-3 text-accent" /> Similar idea found: "Personalized nutrition app" — consider merging</p>
-            <p className="flex items-center gap-2"><ArrowRight className="h-3 w-3 text-accent" /> Your thought on "health personalization" could strengthen this</p>
-          </AISuggestionBox>
+          <ConnectionSuggestionsPanel
+            source={{
+              id: idea.id,
+              type: "business_idea",
+              label: idea.title,
+              text: [idea.title, idea.description, idea.problem, idea.audience, idea.next_steps]
+                .filter(Boolean)
+                .join(" "),
+              topics: idea.topics,
+            }}
+          />
         </div>
       </div>
     );
@@ -75,29 +137,52 @@ const BusinessIdeasPage = () => {
     <div className="max-w-5xl mx-auto">
       <PageHeader
         title="Business Ideas"
-        description="Develop potential businesses"
-        actions={<Button size="sm" className="gap-2"><Plus className="h-3.5 w-3.5" /> New Idea</Button>}
+        description="Business ideas stored in your real backend"
+        actions={<Button size="sm" className="gap-2" onClick={() => navigate("/capture?type=business")}><Plus className="h-3.5 w-3.5" /> New Idea</Button>}
       />
-      <div className="space-y-3">
-        {mockIdeas.map((idea) => (
-          <ContentCard key={idea.id} onClick={() => setSelectedId(idea.id)}>
-            <div className="flex items-start justify-between gap-3">
-              <div className="flex-1 min-w-0">
-                <h3 className="text-sm font-semibold text-foreground">{idea.title}</h3>
-                <p className="text-sm text-muted-foreground mt-1">{idea.insights}</p>
-                <div className="flex items-center gap-2 mt-2">
-                  <span className="text-xs text-muted-foreground">{idea.category}</span>
-                  {idea.topics.map(t => <TopicTag key={t} name={t} />)}
+
+      {searchParams.get("saved") === "business" && <div className="mb-4 rounded-md border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-700">Business idea saved successfully.</div>}
+      {searchParams.get("updated") === "business" && <div className="mb-4 rounded-md border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-700">Business idea updated successfully.</div>}
+      {loading && <div className="text-sm text-muted-foreground">Loading business ideas...</div>}
+      {!loading && error && <div className="text-sm text-red-500">{error}</div>}
+
+      {!loading && !error && ideas.length === 0 ? (
+        <EmptyState
+          icon={<Lightbulb className="h-10 w-10" />}
+          title="No business ideas yet"
+          description="Capture your first business idea to start this section."
+          action={<Button onClick={() => navigate("/capture?type=business")}>Open Capture</Button>}
+        />
+      ) : (
+        <div className="space-y-3">
+          {ideas.map((item) => (
+            <ContentCard key={item.id} onClick={() => setSelectedId(item.id)}>
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                  <h3 className="text-sm font-semibold text-foreground">{item.title}</h3>
+                  {item.description && <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">{item.description}</p>}
+                  {item.topics.length > 0 && (
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {item.topics.map((topic) => (
+                        <TopicTag key={topic.id} name={topic.name} variant="topic" />
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  <Badge className={priorityColors[item.priority || "medium"] || priorityColors.medium}>{item.priority || "medium"}</Badge>
+                  <Button variant="outline" size="sm" className="gap-2" onClick={(event) => { event.stopPropagation(); navigate(`/capture?type=business&mode=edit&id=${item.id}`); }}>
+                    <Pencil className="h-3.5 w-3.5" /> Edit
+                  </Button>
+                  <Button variant="outline" size="sm" className="gap-2" disabled={isDeletingId === item.id} onClick={(event) => { event.stopPropagation(); void handleDelete(item.id); }}>
+                    <Trash2 className="h-3.5 w-3.5" /> {isDeletingId === item.id ? "Deleting..." : "Delete"}
+                  </Button>
                 </div>
               </div>
-              <div className="flex items-center gap-2 shrink-0">
-                <PriorityBadge priority={idea.priority} />
-                <Badge className={stageColors[idea.stage]}>{idea.stage}</Badge>
-              </div>
-            </div>
-          </ContentCard>
-        ))}
-      </div>
+            </ContentCard>
+          ))}
+        </div>
+      )}
     </div>
   );
 };

@@ -1,0 +1,390 @@
+from pydantic import BaseModel
+from typing import Optional
+from datetime import datetime
+
+
+class TopicCreate(BaseModel):
+    name: str
+    description: Optional[str] = None
+
+
+class TopicResponse(BaseModel):
+    id: int
+    name: str
+    description: Optional[str] = None
+    created_at: datetime
+    thought_count: int = 0
+    knowledge_item_count: int = 0
+    total_count: int = 0
+
+    class Config:
+        from_attributes = True
+
+
+class ThoughtCreate(BaseModel):
+    title: Optional[str] = None
+    content: str
+    summary: Optional[str] = None
+    link: Optional[str] = None
+    thought_type: Optional[str] = None
+    priority: Optional[str] = None
+    topic_ids: list[int] = []
+
+
+class ThoughtResponse(BaseModel):
+    id: int
+    title: Optional[str] = None
+    content: str
+    summary: Optional[str] = None
+    link: Optional[str] = None
+    thought_type: Optional[str] = None
+    priority: Optional[str] = None
+    topics: list[TopicResponse] = []
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class GlossaryAttachment(BaseModel):
+    name: str
+    url: str
+    content_type: Optional[str] = None
+    kind: Optional[str] = None
+
+
+class KnowledgeItemCreate(BaseModel):
+    title: Optional[str] = None
+    url: str
+    personal_note: Optional[str] = None
+    source: Optional[str] = None
+    description: Optional[str] = None
+    topic_ids: list[int] = []
+    attachments: list["GlossaryAttachment"] = []
+
+
+class KnowledgeItemResponse(BaseModel):
+    id: int
+    title: Optional[str] = None
+    url: str
+    personal_note: Optional[str] = None
+    source: Optional[str] = None
+    description: Optional[str] = None
+    topics: list[TopicResponse] = []
+    attachments: list["GlossaryAttachment"] = []
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class BusinessIdeaCreate(BaseModel):
+    title: str
+    description: Optional[str] = None
+    problem: Optional[str] = None
+    audience: Optional[str] = None
+    priority: Optional[str] = None
+    next_steps: Optional[str] = None
+    topic_ids: list[int] = []
+    attachments: list[GlossaryAttachment] = []
+
+
+class BusinessIdeaResponse(BaseModel):
+    id: int
+    title: str
+    description: Optional[str] = None
+    problem: Optional[str] = None
+    audience: Optional[str] = None
+    priority: Optional[str] = None
+    next_steps: Optional[str] = None
+    topics: list[TopicResponse] = []
+    attachments: list[GlossaryAttachment] = []
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class QuoteCreate(BaseModel):
+    book_title: str
+    quote_text: str
+    page: Optional[str] = None
+    thoughts: Optional[str] = None
+    attachments: list["GlossaryAttachment"] = []
+
+
+class QuoteResponse(BaseModel):
+    id: int
+    book_title: str
+    quote_text: str
+    page: Optional[str] = None
+    thoughts: Optional[str] = None
+    attachments: list["GlossaryAttachment"] = []
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class WorkIdeaCreate(BaseModel):
+    title: str
+    goal: Optional[str] = None
+    summary: Optional[str] = None
+    context: Optional[str] = None
+    application_category: Optional[str] = None
+    priority: Optional[str] = None
+    timeline: Optional[str] = None
+    execution_mode: Optional[str] = None
+    topic_ids: list[int] = []
+    attachments: list[GlossaryAttachment] = []
+
+
+class WorkIdeaResponse(BaseModel):
+    id: int
+    title: str
+    goal: Optional[str] = None
+    summary: Optional[str] = None
+    context: Optional[str] = None
+    application_category: Optional[str] = None
+    priority: Optional[str] = None
+    timeline: Optional[str] = None
+    execution_mode: Optional[str] = None
+    topics: list[TopicResponse] = []
+    attachments: list[GlossaryAttachment] = []
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class PersonalIdeaCreate(BaseModel):
+    title: str
+    description: Optional[str] = None
+    category: Optional[str] = None
+    priority: Optional[str] = None
+    goal: Optional[str] = None
+    attachments: list["GlossaryAttachment"] = []
+
+
+class PersonalIdeaResponse(BaseModel):
+    id: int
+    title: str
+    description: Optional[str] = None
+    category: Optional[str] = None
+    priority: Optional[str] = None
+    goal: Optional[str] = None
+    attachments: list["GlossaryAttachment"] = []
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class ConnectionCreate(BaseModel):
+    source_type: str
+    source_id: int
+    target_type: str
+    target_id: int
+    relationship_type: Optional[str] = None
+    notes: Optional[str] = None
+
+
+class ConnectionResponse(BaseModel):
+    id: int
+    source_type: str
+    source_id: int
+    source_label: str
+    target_type: str
+    target_id: int
+    target_label: str
+    relationship_type: Optional[str] = None
+    notes: Optional[str] = None
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class GlossaryTermCreate(BaseModel):
+    term: str
+    definition: str
+    term_type: Optional[str] = None
+    aliases: list[str] = []
+    tags: list[str] = []
+    links: list[str] = []
+    attachments: list[GlossaryAttachment] = []
+
+
+class GlossaryTermResponse(BaseModel):
+    id: int
+    term: str
+    definition: str
+    term_type: Optional[str] = None
+    aliases: list[str] = []
+    tags: list[str] = []
+    links: list[str] = []
+    attachments: list[GlossaryAttachment] = []
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class UploadResponse(BaseModel):
+    name: str
+    url: str
+    content_type: Optional[str] = None
+    kind: Optional[str] = None
+
+
+class WatchlistSourceCreate(BaseModel):
+    name: str
+    url: str
+    source_type: Optional[str] = None
+    rss_url: Optional[str] = None
+
+
+class WatchlistSourceResponse(BaseModel):
+    id: int
+    watchlist_id: int
+    name: str
+    url: str
+    source_type: Optional[str] = None
+    rss_url: Optional[str] = None
+    active: bool = True
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class WatchlistCreate(BaseModel):
+    name: str
+    topic: str
+    frequency: str = "daily"
+    interval_days: Optional[int] = None
+    description: Optional[str] = None
+    sources: list[WatchlistSourceCreate] = []
+
+
+class WatchlistResponse(BaseModel):
+    id: int
+    name: str
+    topic: str
+    frequency: str
+    interval_days: Optional[int] = None
+    description: Optional[str] = None
+    last_checked_at: Optional[datetime] = None
+    created_at: datetime
+    sources: list[WatchlistSourceResponse] = []
+
+    class Config:
+        from_attributes = True
+
+
+class DiscoveryItemResponse(BaseModel):
+    id: int
+    watchlist_id: int
+    source_id: Optional[int] = None
+    title: str
+    summary: Optional[str] = None
+    url: str
+    topic: Optional[str] = None
+    source_name: Optional[str] = None
+    published_at: Optional[datetime] = None
+    saved_to_library: bool = False
+    saved_in_discovery: bool = False
+    dismissed: bool = False
+    assigned_topic: Optional[str] = None
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class DiscoveryItemUpdate(BaseModel):
+    saved_in_discovery: Optional[bool] = None
+    dismissed: Optional[bool] = None
+    assigned_topic: Optional[str] = None
+
+
+class SourceSuggestionResponse(BaseModel):
+    name: str
+    url: str
+    source_type: Optional[str] = None
+    rss_url: Optional[str] = None
+    reason: Optional[str] = None
+
+
+class WorkspaceResponse(BaseModel):
+    id: int
+    name: str
+    slug: str
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class UserRegister(BaseModel):
+    email: str
+    password: str
+    nickname: str
+    full_name: Optional[str] = None
+
+
+class UserLogin(BaseModel):
+    email: str
+    password: str
+
+
+class UserResponse(BaseModel):
+    id: int
+    email: str
+    workspace_id: Optional[int] = None
+    nickname: str
+    full_name: Optional[str] = None
+    avatar_data_url: Optional[str] = None
+    tone: Optional[str] = None
+    default_capture_type: Optional[str] = None
+    ai_name: Optional[str] = None
+    timezone: Optional[str] = None
+    language: Optional[str] = None
+    workspace: Optional[WorkspaceResponse] = None
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class UserUpdate(BaseModel):
+    nickname: Optional[str] = None
+    full_name: Optional[str] = None
+    avatar_data_url: Optional[str] = None
+    tone: Optional[str] = None
+    default_capture_type: Optional[str] = None
+    ai_name: Optional[str] = None
+    timezone: Optional[str] = None
+    language: Optional[str] = None
+
+
+class ChangePasswordRequest(BaseModel):
+    current_password: str
+    new_password: str
+
+
+class ForgotPasswordRequest(BaseModel):
+    email: str
+
+
+class ResetPasswordRequest(BaseModel):
+    token: str
+    new_password: str
+
+
+class MessageResponse(BaseModel):
+    message: str
+
+
+class AuthResponse(BaseModel):
+    user: UserResponse
