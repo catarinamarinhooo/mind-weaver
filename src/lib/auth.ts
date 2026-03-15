@@ -119,6 +119,7 @@ export async function registerUser(payload: RegisterPayload) {
   const res = await fetch(`${API_URL}/auth/register`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
+    credentials: "include",
     body: JSON.stringify(payload),
   });
   const responseData = (await res.json().catch(() => null)) as { user: UserApiResponse } | null;
@@ -138,6 +139,7 @@ export async function loginUser(payload: LoginPayload) {
   const res = await fetch(`${API_URL}/auth/login`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
+    credentials: "include",
     body: JSON.stringify(payload),
   });
   const responseData = (await res.json().catch(() => null)) as { user: UserApiResponse } | null;
