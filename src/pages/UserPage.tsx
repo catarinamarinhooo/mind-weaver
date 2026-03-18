@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { changePassword, getCurrentUser, updateCurrentUser } from "@/lib/auth";
+import { getAiActionHistory, type AIActionHistoryResponse } from "@/lib/api";
 import { defaultUserProfile, type UserProfile } from "@/lib/userProfile";
 
 const UserPage = () => {
@@ -24,6 +25,7 @@ const UserPage = () => {
   const [passwordMessage, setPasswordMessage] = useState("");
   const [passwordError, setPasswordError] = useState("");
   const [passwordSaving, setPasswordSaving] = useState(false);
+  const [aiHistory, setAiHistory] = useState<AIActionHistoryResponse[]>([]);
 
   const initials = (profile.nickname || profile.fullName || "CK")
     .split(" ")
@@ -52,9 +54,13 @@ const UserPage = () => {
 
     const loadProfile = async () => {
       try {
-        const user = await getCurrentUser();
+        const [user, history] = await Promise.all([
+          getCurrentUser(),
+          getAiActionHistory(),
+        ]);
         if (mounted) {
           setProfile(user);
+          setAiHistory(history);
         }
       } catch (err) {
         if (mounted) {
@@ -337,6 +343,44 @@ const UserPage = () => {
             </div>
           </div>
         </div>
+      </ContentCard>
+
+      <ContentCard hover={false} className="space-y-4">
+        <div>
+          <div className="text-base font-semibold text-foreground">AI Audit Trail</div>
+          <div className="mt-1 text-sm text-muted-foreground">
+            A record of AI-applied actions in your workspace, including conversions and automated discovery decisions.
+          </div>
+        </div>
+
+        {aiHistory.length === 0 ? (
+          <div className="text-sm text-muted-foreground">
+            No AI actions have been applied yet.
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {aiHistory.slice(0, 10).map((entry) => (
+              <div key={entry.id} className="rounded-lg border border-border p-4">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-sm font-semibold text-foreground">
+                    {entry.action_type.replaceAll("_", " ")}
+                  </span>
+                  <span className="text-xs text-muted-foreground">
+                    {new Date(entry.created_at).toLocaleString()}
+                  </span>
+                </div>
+                {entry.summary && (
+                  <div className="mt-2 text-sm text-foreground">{entry.summary}</div>
+                )}
+                {entry.details && (
+                  <div className="mt-2 whitespace-pre-wrap text-sm text-muted-foreground">
+                    {entry.details}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
       </ContentCard>
     </div>
   );

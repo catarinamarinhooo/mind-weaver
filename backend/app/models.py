@@ -113,6 +113,7 @@ class KnowledgeItem(Base):
     source = Column(String, nullable=True)
     description = Column(Text, nullable=True)
     attachments_json = Column(Text, nullable=True)
+    media_links_json = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     topics = relationship(
         "Topic", secondary=knowledge_item_topics, back_populates="knowledge_items"
@@ -145,6 +146,7 @@ class Quote(Base):
     user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
     workspace_id = Column(Integer, ForeignKey("workspaces.id"), nullable=True, index=True)
     book_title = Column(String, nullable=False)
+    book_type = Column(String, nullable=True)
     quote_text = Column(Text, nullable=False)
     page = Column(String, nullable=True)
     thoughts = Column(Text, nullable=True)
@@ -268,6 +270,24 @@ class DiscoveryItem(Base):
     saved_in_discovery = Column(Boolean, default=False)
     dismissed = Column(Boolean, default=False)
     assigned_topic = Column(String, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class AIActionHistory(Base):
+    __tablename__ = "ai_action_history"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+    workspace_id = Column(Integer, ForeignKey("workspaces.id"), nullable=True, index=True)
+    action_type = Column(String, nullable=False)
+    source_entity_type = Column(String, nullable=False)
+    source_entity_id = Column(Integer, nullable=False)
+    target_entity_type = Column(String, nullable=True)
+    target_entity_id = Column(Integer, nullable=True)
+    summary = Column(Text, nullable=True)
+    details = Column(Text, nullable=True)
+    rolled_back_at = Column(DateTime, nullable=True)
+    rollback_details = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
 

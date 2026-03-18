@@ -4,7 +4,7 @@ import { PageHeader } from "@/components/shared/PageHeader";
 import { ContentCard } from "@/components/shared/ContentCard";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { TopicTag } from "@/components/shared/TopicTag";
-import { AISuggestionBox } from "@/components/shared/AISuggestionBox";
+import { ActionableAISuggestions } from "@/components/shared/ActionableAISuggestions";
 import { ConnectionSuggestionsPanel } from "@/components/shared/ConnectionSuggestionsPanel";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -29,10 +29,15 @@ import {
   Search,
 } from "lucide-react";
 import {
+  createBusinessIdea,
   createConnection,
+  createPersonalIdea,
+  createWorkIdea,
   deleteConnection,
   getBusinessIdeas,
+  getAiSuggestions,
   getConnections,
+  getAiSummary,
   getKnowledgeItems,
   getPersonalIdeas,
   getQuotes,
@@ -41,6 +46,8 @@ import {
   getThoughts,
   getTopics,
   getWorkIdeas,
+  updateThought,
+  type AISuggestionsResponse,
   type ConnectionResponse,
   type ThoughtResponse,
 } from "@/lib/api";
@@ -80,6 +87,11 @@ const ThoughtsPage = () => {
   });
   const [searchTerm, setSearchTerm] = useState("");
   const [sortOrder, setSortOrder] = useState<"newest" | "oldest">("newest");
+  const [aiSuggestions, setAiSuggestions] = useState<AISuggestionsResponse | null>(null);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiActionKey, setAiActionKey] = useState("");
+  const [summaryText, setSummaryText] = useState("");
+  const [summaryLoading, setSummaryLoading] = useState(false);
   const savedItem = searchParams.get("saved");
   const updatedItem = searchParams.get("updated");
   const thoughtId = id ? Number(id) : null;
@@ -194,6 +206,11 @@ const ThoughtsPage = () => {
     setThought(null);
   }, [isDetailView, thoughtId]);
 
+  useEffect(() => {
+    setAiSuggestions(null);
+    setSummaryText("");
+  }, [thoughtId]);
+
   const handleDelete = async (idToDelete: number) => {
     const confirmed = window.confirm(
       "Are you sure you want to delete this thought?"
@@ -262,6 +279,187 @@ const ThoughtsPage = () => {
       );
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to delete connection.");
+    }
+  };
+
+  const handleLoadAiSuggestions = async () => {
+    if (!thought) {
+      return;
+    }
+    try {
+      setAiLoading(true);
+      setError("");
+      setAiSuggestions(await getAiSuggestions("thought", thought.id));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load AI suggestions.");
+    } finally {
+      setAiLoading(false);
+    }
+  };
+
+  const handleAddSuggestedTopic = async (topicId: number) => {
+    if (!thought || thought.topics.some((topic) => topic.id === topicId)) {
+      return;
+    }
+
+    try {
+      setAiActionKey(`topic-${topicId}`);
+      setError("");
+      const updatedThought = await updateThought(thought.id, {
+        title: thought.title,
+        content: thought.content,
+        summary: thought.summary,
+        link: thought.link,
+        thought_type: thought.thought_type,
+        priority: thought.priority,
+        topic_ids: [...thought.topics.map((topic) => topic.id), topicId],
+      });
+      setThought(updatedThought);
+      setAiSuggestions((current) =>
+        current
+          ? {
+              ...current,
+              suggested_topics: current.suggested_topics.filter(
+                (topic) => topic.topic_id !== topicId
+              ),
+            }
+          : current
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to add topic.");
+    } finally {
+      setAiActionKey("");
+    }
+  };
+
+  const handleCreateSuggestedConnection = async (
+    targetType: string,
+    targetId: number,
+    explanation: string
+  ) => {
+    if (!thought) {
+      return;
+    }
+
+    try {
+      setAiActionKey(`entity-${targetType}-${targetId}`);
+      setError("");
+      const newConnection = await createConnection({
+        source_type: "thought",
+        source_id: thought.id,
+        target_type: targetType,
+        target_id: targetId,
+        relationship_type: "ai_suggested",
+        notes: explanation,
+      });
+      setConnections((current) => [newConnection, ...current]);
+      setAiSuggestions((current) =>
+        current
+          ? {
+              ...current,
+              suggested_related_entities: current.suggested_related_entities.filter(
+                (entity) =>
+                  !(
+                    entity.entity_type === targetType && entity.entity_id === targetId
+                  )
+              ),
+            }
+          : current
+      );
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Failed to create suggested connection."
+      );
+    } finally {
+      setAiActionKey("");
+    }
+  };
+
+  const handleSummarize = async () => {
+    if (!thought) {
+      return;
+    }
+    try {
+      setSummaryLoading(true);
+      setError("");
+      const result = await getAiSummary({
+        entity_type: "thought",
+        entity_id: thought.id,
+      });
+      setSummaryText(result.summary);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to summarize thought.");
+    } finally {
+      setSummaryLoading(false);
+    }
+  };
+
+  const handleConvertToBusinessIdea = async () => {
+    if (!thought) {
+      return;
+    }
+    try {
+      setError("");
+      await createBusinessIdea({
+        title: thought.title || `Business idea from thought #${thought.id}`,
+        description: thought.content,
+        problem: thought.summary || thought.content.slice(0, 240),
+        audience: null,
+        priority: thought.priority || "medium",
+        next_steps: `Created from thought ${thought.title || thought.id}.`,
+        topic_ids: thought.topics.map((topic) => topic.id),
+        attachments: [],
+      });
+      setActionMessage("Business idea created from this thought.");
+      navigate("/business-ideas");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to create business idea.");
+    }
+  };
+
+  const handleConvertToWorkIdea = async () => {
+    if (!thought) {
+      return;
+    }
+    try {
+      setError("");
+      await createWorkIdea({
+        title: thought.title || `Work idea from thought #${thought.id}`,
+        goal: thought.summary || thought.content.slice(0, 200),
+        summary: thought.content,
+        context: thought.link || null,
+        application_category: thought.thought_type || "general",
+        priority: thought.priority || "medium",
+        timeline: null,
+        execution_mode: "solo",
+        topic_ids: thought.topics.map((topic) => topic.id),
+        attachments: [],
+      });
+      setActionMessage("Work idea created from this thought.");
+      navigate("/work-ideas");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to create work idea.");
+    }
+  };
+
+  const handleConvertToPersonalIdea = async () => {
+    if (!thought) {
+      return;
+    }
+    try {
+      setError("");
+      await createPersonalIdea({
+        title: thought.title || `Personal idea from thought #${thought.id}`,
+        description: thought.content,
+        category: thought.thought_type || "general",
+        priority: thought.priority || "medium",
+        goal: thought.summary || null,
+        attachments: [],
+      });
+      setActionMessage("Personal idea created from this thought.");
+      navigate("/personal-ideas");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to create personal idea.");
     }
   };
 
@@ -359,30 +557,93 @@ const ThoughtsPage = () => {
             </div>
 
             <div className="flex flex-wrap gap-2 mb-6">
-              <Button variant="outline" size="sm" className="gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-2"
+                onClick={() =>
+                  navigate(
+                    `/ask?prompt=${encodeURIComponent(
+                      `Help me develop this thought: ${thought.title || thought.content.slice(0, 120)}`
+                    )}`
+                  )
+                }
+              >
                 <Brain className="h-3.5 w-3.5" /> Develop this thought
               </Button>
-              <Button variant="outline" size="sm" className="gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-2"
+                onClick={() => void handleConvertToBusinessIdea()}
+              >
                 <Lightbulb className="h-3.5 w-3.5" /> Convert to business idea
               </Button>
-              <Button variant="outline" size="sm" className="gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-2"
+                onClick={() => void handleConvertToWorkIdea()}
+              >
                 <Briefcase className="h-3.5 w-3.5" /> Convert to work idea
               </Button>
-              <Button variant="outline" size="sm" className="gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-2"
+                onClick={() => void handleConvertToPersonalIdea()}
+              >
                 <Heart className="h-3.5 w-3.5" /> Convert to personal idea
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-2"
+                onClick={() => void handleSummarize()}
+              >
+                {summaryLoading ? "Summarizing..." : "Summarize"}
               </Button>
             </div>
 
-            <AISuggestionBox>
-              <p className="flex items-center gap-2">
-                <ArrowRight className="h-3 w-3 text-accent" />
-                This thought was saved in your real database.
-              </p>
-              <p className="flex items-center gap-2">
-                <ArrowRight className="h-3 w-3 text-accent" />
-                Next step: connect topics, summaries, and AI suggestions.
-              </p>
-            </AISuggestionBox>
+            {summaryText && (
+              <div className="mb-6 rounded-xl border border-border bg-background/80 p-4">
+                <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  AI Summary
+                </div>
+                <p className="text-sm text-foreground whitespace-pre-wrap">{summaryText}</p>
+              </div>
+            )}
+
+            <ActionableAISuggestions
+              suggestions={aiSuggestions}
+              loading={aiLoading}
+              actionKey={aiActionKey}
+              appliedTopicIds={thought.topics.map((topic) => topic.id)}
+              onLoadSuggestions={handleLoadAiSuggestions}
+              onApplyTopic={(topicId, explanation) =>
+                handleAddSuggestedTopic(topicId)
+              }
+              onApplyEntity={(entityType, entityId, explanation) =>
+                handleCreateSuggestedConnection(entityType, entityId, explanation)
+              }
+              onOpenEntity={(entityType, entityId) =>
+                navigate(
+                  entityType === "knowledge"
+                    ? `/library/${entityId}`
+                    : entityType === "thought"
+                      ? `/thoughts/${entityId}`
+                      : entityType === "business_idea"
+                        ? "/business-ideas"
+                        : entityType === "work_idea"
+                          ? "/work-ideas"
+                          : entityType === "personal_idea"
+                            ? "/personal-ideas"
+                            : entityType === "quote"
+                              ? "/quotes"
+                              : "/topics"
+                )
+              }
+            />
 
             <div className="mt-6 glass-card p-6">
               <h2 className="mb-4 text-sm font-semibold uppercase tracking-wider text-muted-foreground">

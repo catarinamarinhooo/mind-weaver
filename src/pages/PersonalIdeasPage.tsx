@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
+import { ActionableAISuggestions } from "@/components/shared/ActionableAISuggestions";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { AttachmentPreviewList } from "@/components/shared/AttachmentPreviewList";
 import { ContentCard } from "@/components/shared/ContentCard";
@@ -9,11 +10,15 @@ import { EmptyState } from "@/components/shared/EmptyState";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
+  createConnection,
   deletePersonalIdea,
+  getAiSuggestions,
+  getAiSummary,
   getPersonalIdeas,
+  type AISuggestionsResponse,
   type PersonalIdeaResponse,
 } from "@/lib/api";
-import { ArrowLeft, Heart, Pencil, Plus, Trash2 } from "lucide-react";
+import { ArrowLeft, Brain, Heart, Pencil, Plus, Trash2 } from "lucide-react";
 
 const priorityColors: Record<string, string> = {
   high: "bg-priority-high/10 text-priority-high",
@@ -29,6 +34,12 @@ const PersonalIdeasPage = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [isDeletingId, setIsDeletingId] = useState<number | null>(null);
+  const [summaryText, setSummaryText] = useState("");
+  const [summaryLoading, setSummaryLoading] = useState(false);
+  const [aiSuggestions, setAiSuggestions] = useState<AISuggestionsResponse | null>(null);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiActionKey, setAiActionKey] = useState("");
+  const [connectionsKey, setConnectionsKey] = useState(0);
   const idea = ideas.find((item) => item.id === selectedId);
 
   useEffect(() => {
@@ -46,6 +57,11 @@ const PersonalIdeasPage = () => {
     void loadIdeas();
   }, []);
 
+  useEffect(() => {
+    setSummaryText("");
+    setAiSuggestions(null);
+  }, [selectedId]);
+
   const handleDelete = async (id: number) => {
     if (!window.confirm("Are you sure you want to delete this personal idea?")) return;
     try {
@@ -57,6 +73,121 @@ const PersonalIdeasPage = () => {
       setError(err instanceof Error ? err.message : "Failed to delete personal idea.");
     } finally {
       setIsDeletingId(null);
+    }
+  };
+
+  const handleSummarize = async () => {
+    if (!idea) {
+      return;
+    }
+    try {
+      setSummaryLoading(true);
+      setError("");
+      const result = await getAiSummary({
+        entity_type: "personal_idea",
+        entity_id: idea.id,
+      });
+      setSummaryText(result.summary);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to summarize personal idea.");
+    } finally {
+      setSummaryLoading(false);
+    }
+  };
+
+  const handleLoadAiSuggestions = async () => {
+    if (!idea) return;
+    try {
+      setAiLoading(true);
+      setError("");
+      setAiSuggestions(await getAiSuggestions("personal_idea", idea.id));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load AI suggestions.");
+    } finally {
+      setAiLoading(false);
+    }
+  };
+
+  const getTargetPath = (entityType: string, entityId: number) => {
+    switch (entityType) {
+      case "thought":
+        return `/thoughts/${entityId}`;
+      case "knowledge":
+        return `/library/${entityId}`;
+      case "business_idea":
+        return "/business-ideas";
+      case "work_idea":
+        return "/work-ideas";
+      case "personal_idea":
+        return "/personal-ideas";
+      case "quote":
+        return "/quotes";
+      default:
+        return "/topics";
+    }
+  };
+
+  const handleConnectSuggestedTopic = async (topicId: number, explanation: string) => {
+    if (!idea) return;
+    try {
+      setAiActionKey(`topic-${topicId}`);
+      setError("");
+      await createConnection({
+        source_type: "personal_idea",
+        source_id: idea.id,
+        target_type: "topic",
+        target_id: topicId,
+        relationship_type: "ai_suggested_topic",
+        notes: explanation,
+      });
+      setConnectionsKey((current) => current + 1);
+      setAiSuggestions((current) =>
+        current
+          ? {
+              ...current,
+              suggested_topics: current.suggested_topics.filter((topic) => topic.topic_id !== topicId),
+            }
+          : current
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to connect suggested topic.");
+    } finally {
+      setAiActionKey("");
+    }
+  };
+
+  const handleCreateSuggestedConnection = async (
+    targetType: string,
+    targetId: number,
+    explanation: string
+  ) => {
+    if (!idea) return;
+    try {
+      setAiActionKey(`entity-${targetType}-${targetId}`);
+      setError("");
+      await createConnection({
+        source_type: "personal_idea",
+        source_id: idea.id,
+        target_type: targetType,
+        target_id: targetId,
+        relationship_type: "ai_suggested",
+        notes: explanation,
+      });
+      setConnectionsKey((current) => current + 1);
+      setAiSuggestions((current) =>
+        current
+          ? {
+              ...current,
+              suggested_related_entities: current.suggested_related_entities.filter(
+                (entity) => !(entity.entity_type === targetType && entity.entity_id === targetId)
+              ),
+            }
+          : current
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to create connection.");
+    } finally {
+      setAiActionKey("");
     }
   };
 
@@ -75,6 +206,12 @@ const PersonalIdeasPage = () => {
             </div>
           </div>
           <div className="flex gap-2">
+            <Button variant="outline" size="sm" className="gap-2" onClick={() => navigate(`/ask?prompt=${encodeURIComponent(`Help me think through this personal idea: ${idea.title}`)}`)}>
+              <Brain className="h-3.5 w-3.5" /> Ask AI
+            </Button>
+            <Button variant="outline" size="sm" className="gap-2" onClick={() => void handleSummarize()}>
+              {summaryLoading ? "Summarizing..." : "Summarize"}
+            </Button>
             <Button variant="outline" size="sm" className="gap-2" onClick={() => navigate(`/capture?type=personal&mode=edit&id=${idea.id}`)}>
               <Pencil className="h-3.5 w-3.5" /> Edit
             </Button>
@@ -84,6 +221,7 @@ const PersonalIdeasPage = () => {
           </div>
         </div>
         <div className="space-y-4">
+          {summaryText && <ContentCard hover={false}><h3 className="mb-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground">AI Summary</h3><p className="text-sm text-foreground whitespace-pre-wrap">{summaryText}</p></ContentCard>}
           {idea.description && <ContentCard hover={false}><h3 className="mb-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Description</h3><p className="text-sm text-foreground">{idea.description}</p></ContentCard>}
           {idea.goal && <ContentCard hover={false}><h3 className="mb-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Goal</h3><p className="text-sm text-foreground">{idea.goal}</p></ContentCard>}
         </div>
@@ -95,7 +233,26 @@ const PersonalIdeasPage = () => {
         )}
 
         <div className="mt-6">
-          <ConnectionsPanel sourceType="personal_idea" sourceId={idea.id} />
+          <ActionableAISuggestions
+            suggestions={aiSuggestions}
+            loading={aiLoading}
+            actionKey={aiActionKey}
+            topicActionLabel="Connect Topic"
+            onLoadSuggestions={handleLoadAiSuggestions}
+            onApplyTopic={(topicId, explanation) =>
+              handleConnectSuggestedTopic(topicId, explanation)
+            }
+            onApplyEntity={(entityType, entityId, explanation) =>
+              handleCreateSuggestedConnection(entityType, entityId, explanation)
+            }
+            onOpenEntity={(entityType, entityId) =>
+              navigate(getTargetPath(entityType, entityId))
+            }
+          />
+        </div>
+
+        <div className="mt-6">
+          <ConnectionsPanel key={connectionsKey} sourceType="personal_idea" sourceId={idea.id} />
         </div>
 
         <div className="mt-6">

@@ -48,6 +48,7 @@ export interface KnowledgeItemCreate {
   description?: string | null;
   topic_ids?: number[];
   attachments?: GlossaryAttachment[];
+  media_links?: MediaLink[];
 }
 
 export interface KnowledgeItemResponse {
@@ -59,6 +60,7 @@ export interface KnowledgeItemResponse {
   description?: string | null;
   topics: TopicResponse[];
   attachments: GlossaryAttachment[];
+  media_links: MediaLink[];
   created_at: string;
 }
 
@@ -88,6 +90,7 @@ export interface BusinessIdeaResponse {
 
 export interface QuoteCreate {
   book_title: string;
+  book_type?: string | null;
   quote_text: string;
   page?: string | null;
   thoughts?: string | null;
@@ -97,6 +100,7 @@ export interface QuoteCreate {
 export interface QuoteResponse {
   id: number;
   book_title: string;
+  book_type?: string | null;
   quote_text: string;
   page?: string | null;
   thoughts?: string | null;
@@ -179,11 +183,127 @@ export interface ConnectionResponse {
   created_at: string;
 }
 
+export interface AISuggestedTopic {
+  topic_id: number;
+  topic_name: string;
+  score: number;
+  explanation: string;
+}
+
+export interface AISuggestedEntity {
+  entity_type: string;
+  entity_id: number;
+  label: string;
+  score: number;
+  explanation: string;
+}
+
+export interface AISuggestionsResponse {
+  entity_type: string;
+  entity_id: number;
+  explanation: string;
+  suggested_topics: AISuggestedTopic[];
+  suggested_related_entities: AISuggestedEntity[];
+}
+
+export interface AIChatMessage {
+  role: "user" | "assistant";
+  content: string;
+}
+
+export interface AIChatCitation {
+  entity_type: string;
+  entity_id: number;
+  label: string;
+  score?: number | null;
+  url?: string | null;
+  parent_entity_type?: string | null;
+  parent_entity_id?: number | null;
+  parent_label?: string | null;
+}
+
+export interface AIChatResponse {
+  answer: string;
+  citations: AIChatCitation[];
+}
+
+export interface AISummaryResponse {
+  entity_type: string;
+  entity_id: number;
+  title: string;
+  summary: string;
+}
+
+export interface AIDiscoveryTriageResponse {
+  discovery_item_id: number;
+  relevance_score: number;
+  recommended_action: string;
+  suggested_topic?: string | null;
+  explanation: string;
+}
+
+export interface AIMediaInsightsResponse {
+  knowledge_item_id: number;
+  media_url: string;
+  media_type?: string | null;
+  title: string;
+  summary: string;
+  key_points: string[];
+  transcript_used: boolean;
+  source_kind: string;
+  analyzed_at: string;
+}
+
+export interface AIApplyThoughtConversionResponse {
+  action_type: string;
+  target_type: string;
+  target_id: number;
+  target_path: string;
+  title: string;
+  suggested_next_steps: string;
+}
+
+export interface AIApplyDiscoveryActionResponse {
+  action_type: string;
+  discovery_item_id: number;
+  recommended_action: string;
+  target_path: string;
+  suggested_topic?: string | null;
+  explanation: string;
+}
+
+export interface AIActionHistoryResponse {
+  id: number;
+  action_type: string;
+  source_entity_type: string;
+  source_entity_id: number;
+  target_entity_type?: string | null;
+  target_entity_id?: number | null;
+  summary?: string | null;
+  details?: string | null;
+  rolled_back_at?: string | null;
+  rollback_details?: string | null;
+  created_at: string;
+}
+
 export interface GlossaryAttachment {
   name: string;
   url: string;
   content_type?: string | null;
   kind?: string | null;
+}
+
+export interface MediaLink {
+  label: string;
+  url: string;
+  media_type?: string | null;
+  notes?: string | null;
+  ai_title?: string | null;
+  ai_summary?: string | null;
+  ai_key_points?: string[];
+  ai_last_analyzed_at?: string | null;
+  ai_source_kind?: string | null;
+  ai_transcript_used?: boolean | null;
 }
 
 export interface GlossaryTermCreate {
@@ -659,6 +779,204 @@ export async function deleteConnection(id: number): Promise<void> {
         : `Failed to delete connection (${res.status})`
     );
   }
+}
+
+export async function getAiSuggestions(
+  entityType:
+    | "thought"
+    | "knowledge"
+    | "business_idea"
+    | "work_idea"
+    | "personal_idea"
+    | "quote",
+  entityId: number
+): Promise<AISuggestionsResponse> {
+  const params = new URLSearchParams({
+    entity_type: entityType,
+    entity_id: String(entityId),
+  });
+  const res = await fetch(`${API_URL}/ai/suggest-connections?${params.toString()}`, {
+    credentials: "include",
+  });
+  const responseData = await res.json().catch(() => null);
+  if (!res.ok || !responseData) {
+    throw new Error(
+      responseData?.detail
+        ? String(responseData.detail)
+        : `Failed to fetch AI suggestions (${res.status})`
+    );
+  }
+  return responseData as AISuggestionsResponse;
+}
+
+export async function getAiChatResponse(payload: {
+  message: string;
+  history: AIChatMessage[];
+}): Promise<AIChatResponse> {
+  const res = await fetch(`${API_URL}/ai/chat`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    credentials: "include",
+    body: JSON.stringify(payload),
+  });
+  const responseData = await res.json().catch(() => null);
+  if (!res.ok || !responseData) {
+    throw new Error(
+      responseData?.detail
+        ? String(responseData.detail)
+        : `Failed to get AI chat response (${res.status})`
+    );
+  }
+  return responseData as AIChatResponse;
+}
+
+export async function getAiSummary(payload: {
+  entity_type: string;
+  entity_id: number;
+}): Promise<AISummaryResponse> {
+  const res = await fetch(`${API_URL}/ai/summarize`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    credentials: "include",
+    body: JSON.stringify(payload),
+  });
+  const responseData = await res.json().catch(() => null);
+  if (!res.ok || !responseData) {
+    throw new Error(
+      responseData?.detail
+        ? String(responseData.detail)
+        : `Failed to summarize with AI (${res.status})`
+    );
+  }
+  return responseData as AISummaryResponse;
+}
+
+export async function triageDiscoveryItemWithAi(
+  discoveryItemId: number
+): Promise<AIDiscoveryTriageResponse> {
+  const res = await fetch(`${API_URL}/ai/discovery-triage`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    credentials: "include",
+    body: JSON.stringify({ discovery_item_id: discoveryItemId }),
+  });
+  const responseData = await res.json().catch(() => null);
+  if (!res.ok || !responseData) {
+    throw new Error(
+      responseData?.detail
+        ? String(responseData.detail)
+        : `Failed to triage discovery item with AI (${res.status})`
+    );
+  }
+  return responseData as AIDiscoveryTriageResponse;
+}
+
+export async function getAiMediaInsights(payload: {
+  knowledge_item_id: number;
+  media_url: string;
+  media_type?: string | null;
+  label?: string | null;
+  notes?: string | null;
+}): Promise<AIMediaInsightsResponse> {
+  const res = await fetch(`${API_URL}/ai/media-insights`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    credentials: "include",
+    body: JSON.stringify(payload),
+  });
+  const responseData = await res.json().catch(() => null);
+  if (!res.ok || !responseData) {
+    throw new Error(
+      responseData?.detail
+        ? String(responseData.detail)
+        : `Failed to analyze media link with AI (${res.status})`
+    );
+  }
+  return responseData as AIMediaInsightsResponse;
+}
+
+export async function applyThoughtConversionWithAi(payload: {
+  thought_id: number;
+  target_type: "business" | "work" | "personal";
+}): Promise<AIApplyThoughtConversionResponse> {
+  const res = await fetch(`${API_URL}/ai/apply-thought-conversion`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    credentials: "include",
+    body: JSON.stringify(payload),
+  });
+  const responseData = await res.json().catch(() => null);
+  if (!res.ok || !responseData) {
+    throw new Error(
+      responseData?.detail
+        ? String(responseData.detail)
+        : `Failed to apply AI thought conversion (${res.status})`
+    );
+  }
+  return responseData as AIApplyThoughtConversionResponse;
+}
+
+export async function applyDiscoveryActionWithAi(
+  discovery_item_id: number
+): Promise<AIApplyDiscoveryActionResponse> {
+  const res = await fetch(`${API_URL}/ai/apply-discovery-action`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    credentials: "include",
+    body: JSON.stringify({ discovery_item_id }),
+  });
+  const responseData = await res.json().catch(() => null);
+  if (!res.ok || !responseData) {
+    throw new Error(
+      responseData?.detail
+        ? String(responseData.detail)
+        : `Failed to apply AI discovery action (${res.status})`
+    );
+  }
+  return responseData as AIApplyDiscoveryActionResponse;
+}
+
+export async function getAiActionHistory(): Promise<AIActionHistoryResponse[]> {
+  const res = await fetch(`${API_URL}/ai/action-history`, {
+    credentials: "include",
+  });
+  const responseData = await res.json().catch(() => null);
+  if (!res.ok || !responseData) {
+    throw new Error(
+      responseData?.detail
+        ? String(responseData.detail)
+        : `Failed to fetch AI action history (${res.status})`
+    );
+  }
+  return responseData as AIActionHistoryResponse[];
+}
+
+export async function rollbackAiAction(historyId: number): Promise<{ message: string; history_entry_id: number }> {
+  const res = await fetch(`${API_URL}/ai/action-history/${historyId}/rollback`, {
+    method: "POST",
+    credentials: "include",
+  });
+  const responseData = await res.json().catch(() => null);
+  if (!res.ok || !responseData) {
+    throw new Error(
+      responseData?.detail
+        ? String(responseData.detail)
+        : `Failed to rollback AI action (${res.status})`
+    );
+  }
+  return responseData as { message: string; history_entry_id: number };
 }
 
 export async function uploadFile(file: File): Promise<UploadResponse> {

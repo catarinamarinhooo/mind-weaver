@@ -16,6 +16,7 @@ import {
   getTopics,
   getWorkIdeaById,
   type GlossaryAttachment,
+  type MediaLink,
   type TopicResponse,
   updateBusinessIdea,
   updateGlossaryTerm,
@@ -134,6 +135,11 @@ const Capture = () => {
   const [knowledgeDescription, setKnowledgeDescription] = useState("");
   const [knowledgeTopicIds, setKnowledgeTopicIds] = useState<number[]>([]);
   const [knowledgeAttachments, setKnowledgeAttachments] = useState<GlossaryAttachment[]>([]);
+  const [knowledgeMediaLinks, setKnowledgeMediaLinks] = useState<MediaLink[]>([]);
+  const [knowledgeMediaLabel, setKnowledgeMediaLabel] = useState("");
+  const [knowledgeMediaUrl, setKnowledgeMediaUrl] = useState("");
+  const [knowledgeMediaType, setKnowledgeMediaType] = useState("");
+  const [knowledgeMediaNotes, setKnowledgeMediaNotes] = useState("");
 
   const [businessTitle, setBusinessTitle] = useState("");
   const [businessDescription, setBusinessDescription] = useState("");
@@ -145,6 +151,7 @@ const Capture = () => {
   const [businessAttachments, setBusinessAttachments] = useState<GlossaryAttachment[]>([]);
 
   const [quoteBookTitle, setQuoteBookTitle] = useState("");
+  const [quoteBookType, setQuoteBookType] = useState("");
   const [quoteText, setQuoteText] = useState("");
   const [quotePage, setQuotePage] = useState("");
   const [quoteThoughts, setQuoteThoughts] = useState("");
@@ -225,6 +232,36 @@ const Capture = () => {
     setter: React.Dispatch<React.SetStateAction<GlossaryAttachment[]>>
   ) => {
     setter((current) => current.filter((item) => item.url !== attachmentUrl));
+  };
+
+  const addKnowledgeMediaLink = () => {
+    const normalizedUrl = knowledgeMediaUrl.trim();
+    if (!normalizedUrl) {
+      setMessageType("error");
+      setMessage("Media URL is required.");
+      return;
+    }
+
+    setKnowledgeMediaLinks((current) => [
+      ...current,
+      {
+        label: knowledgeMediaLabel.trim() || knowledgeMediaType.trim() || "Media link",
+        url: normalizedUrl,
+        media_type: knowledgeMediaType.trim() || null,
+        notes: knowledgeMediaNotes.trim() || null,
+      },
+    ]);
+    setKnowledgeMediaLabel("");
+    setKnowledgeMediaUrl("");
+    setKnowledgeMediaType("");
+    setKnowledgeMediaNotes("");
+    setMessage("");
+  };
+
+  const removeKnowledgeMediaLink = (urlToRemove: string) => {
+    setKnowledgeMediaLinks((current) =>
+      current.filter((mediaLink) => mediaLink.url !== urlToRemove)
+    );
   };
 
   const handleAttachmentUpload = async (
@@ -352,6 +389,11 @@ const Capture = () => {
     setKnowledgeDescription("");
     setKnowledgeTopicIds([]);
     setKnowledgeAttachments([]);
+    setKnowledgeMediaLinks([]);
+    setKnowledgeMediaLabel("");
+    setKnowledgeMediaUrl("");
+    setKnowledgeMediaType("");
+    setKnowledgeMediaNotes("");
   };
 
   const resetBusinessForm = () => {
@@ -367,6 +409,7 @@ const Capture = () => {
 
   const resetQuoteForm = () => {
     setQuoteBookTitle("");
+    setQuoteBookType("");
     setQuoteText("");
     setQuotePage("");
     setQuoteThoughts("");
@@ -440,6 +483,7 @@ const Capture = () => {
           setKnowledgeDescription(item.description || "");
           setKnowledgeTopicIds(item.topics.map((topic) => topic.id));
           setKnowledgeAttachments(item.attachments || []);
+          setKnowledgeMediaLinks(item.media_links || []);
           return;
         }
 
@@ -459,6 +503,7 @@ const Capture = () => {
         if (activeTab === "quote") {
           const item = await getQuoteById(Number(itemId));
           setQuoteBookTitle(item.book_title || "");
+          setQuoteBookType(item.book_type || "");
           setQuoteText(item.quote_text || "");
           setQuotePage(item.page || "");
           setQuoteThoughts(item.thoughts || "");
@@ -562,6 +607,7 @@ const Capture = () => {
       description: knowledgeDescription.trim() || null,
       topic_ids: knowledgeTopicIds,
       attachments: knowledgeAttachments,
+      media_links: knowledgeMediaLinks,
     };
 
     if (isEditMode && itemId) {
@@ -613,6 +659,7 @@ const Capture = () => {
 
     const payload = {
       book_title: quoteBookTitle.trim(),
+      book_type: quoteBookType.trim() || null,
       quote_text: quoteText.trim(),
       page: quotePage.trim() || null,
       thoughts: quoteThoughts.trim() || null,
@@ -1070,6 +1117,83 @@ const Capture = () => {
               onUpload={(files) => handleAttachmentUpload(files, setKnowledgeAttachments)}
               onRemove={(attachmentUrl) => removeAttachment(attachmentUrl, setKnowledgeAttachments)}
             />
+            <div className="rounded-lg border border-border p-4 space-y-3">
+              <div>
+                <div className="text-sm font-medium text-foreground">
+                  Video / Podcast Links
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Add YouTube, podcast, or media links. Include notes or key ideas so AI summaries can use them.
+                </p>
+              </div>
+              <div className="grid gap-3 md:grid-cols-2">
+                <Input
+                  placeholder="Label, e.g. Episode 12"
+                  value={knowledgeMediaLabel}
+                  onChange={(e) => setKnowledgeMediaLabel(e.target.value)}
+                />
+                <Input
+                  placeholder="https://youtube.com/... or podcast URL"
+                  value={knowledgeMediaUrl}
+                  onChange={(e) => setKnowledgeMediaUrl(e.target.value)}
+                />
+              </div>
+              <div className="grid gap-3 md:grid-cols-2">
+                <Select value={knowledgeMediaType} onValueChange={setKnowledgeMediaType}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select media type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="youtube">YouTube</SelectItem>
+                    <SelectItem value="podcast">Podcast</SelectItem>
+                    <SelectItem value="video">Video</SelectItem>
+                    <SelectItem value="audio">Audio</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Button type="button" variant="outline" onClick={addKnowledgeMediaLink}>
+                  Add Media Link
+                </Button>
+              </div>
+              <Textarea
+                placeholder="Optional notes, transcript snippets, or key ideas from this media"
+                rows={3}
+                value={knowledgeMediaNotes}
+                onChange={(e) => setKnowledgeMediaNotes(e.target.value)}
+              />
+              <div className="space-y-2">
+                {knowledgeMediaLinks.map((mediaLink) => (
+                  <div
+                    key={`${mediaLink.url}-${mediaLink.label}`}
+                    className="rounded-md border border-border p-3 text-sm"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="font-medium text-foreground">{mediaLink.label}</div>
+                        <div className="text-xs text-muted-foreground break-all">{mediaLink.url}</div>
+                        {mediaLink.media_type && (
+                          <div className="mt-1 text-xs text-muted-foreground">
+                            Type: {mediaLink.media_type}
+                          </div>
+                        )}
+                        {mediaLink.notes && (
+                          <div className="mt-2 text-xs text-muted-foreground whitespace-pre-wrap">
+                            {mediaLink.notes}
+                          </div>
+                        )}
+                      </div>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => removeKnowledgeMediaLink(mediaLink.url)}
+                      >
+                        Remove
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
             {renderTopicPicker("knowledge")}
           </div>
         );
@@ -1149,6 +1273,13 @@ const Capture = () => {
           <div className="space-y-4">
             <FieldGroup label="Book Title">
               <Input placeholder="Name of the book" value={quoteBookTitle} onChange={(e) => setQuoteBookTitle(e.target.value)} />
+            </FieldGroup>
+            <FieldGroup label="Book Type">
+              <Input
+                placeholder="Book, article, paper, essay, report..."
+                value={quoteBookType}
+                onChange={(e) => setQuoteBookType(e.target.value)}
+              />
             </FieldGroup>
             <FieldGroup label="Quote Text">
               <Textarea placeholder="Enter the quote..." rows={4} value={quoteText} onChange={(e) => setQuoteText(e.target.value)} />

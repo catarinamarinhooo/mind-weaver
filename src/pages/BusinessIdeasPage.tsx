@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
+import { ActionableAISuggestions } from "@/components/shared/ActionableAISuggestions";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { AttachmentPreviewList } from "@/components/shared/AttachmentPreviewList";
 import { ContentCard } from "@/components/shared/ContentCard";
@@ -10,11 +11,16 @@ import { TopicTag } from "@/components/shared/TopicTag";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
+  createConnection,
   deleteBusinessIdea,
+  getAiSuggestions,
+  getAiSummary,
   getBusinessIdeas,
+  updateBusinessIdea,
+  type AISuggestionsResponse,
   type BusinessIdeaResponse,
 } from "@/lib/api";
-import { ArrowLeft, Lightbulb, Pencil, Plus, Trash2 } from "lucide-react";
+import { ArrowLeft, Brain, Lightbulb, Pencil, Plus, Trash2 } from "lucide-react";
 
 const priorityColors: Record<string, string> = {
   high: "bg-priority-high/10 text-priority-high",
@@ -30,6 +36,12 @@ const BusinessIdeasPage = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [isDeletingId, setIsDeletingId] = useState<number | null>(null);
+  const [summaryText, setSummaryText] = useState("");
+  const [summaryLoading, setSummaryLoading] = useState(false);
+  const [aiSuggestions, setAiSuggestions] = useState<AISuggestionsResponse | null>(null);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiActionKey, setAiActionKey] = useState("");
+  const [connectionsKey, setConnectionsKey] = useState(0);
   const idea = ideas.find((item) => item.id === selectedId);
 
   useEffect(() => {
@@ -47,6 +59,11 @@ const BusinessIdeasPage = () => {
 
     void loadIdeas();
   }, []);
+
+  useEffect(() => {
+    setSummaryText("");
+    setAiSuggestions(null);
+  }, [selectedId]);
 
   const handleDelete = async (id: number) => {
     if (!window.confirm("Are you sure you want to delete this business idea?")) {
@@ -67,6 +84,123 @@ const BusinessIdeasPage = () => {
     }
   };
 
+  const handleSummarize = async () => {
+    if (!idea) {
+      return;
+    }
+    try {
+      setSummaryLoading(true);
+      setError("");
+      const result = await getAiSummary({
+        entity_type: "business_idea",
+        entity_id: idea.id,
+      });
+      setSummaryText(result.summary);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to summarize business idea.");
+    } finally {
+      setSummaryLoading(false);
+    }
+  };
+
+  const handleLoadAiSuggestions = async () => {
+    if (!idea) return;
+    try {
+      setAiLoading(true);
+      setError("");
+      setAiSuggestions(await getAiSuggestions("business_idea", idea.id));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load AI suggestions.");
+    } finally {
+      setAiLoading(false);
+    }
+  };
+
+  const getTargetPath = (entityType: string, entityId: number) => {
+    switch (entityType) {
+      case "thought":
+        return `/thoughts/${entityId}`;
+      case "knowledge":
+        return `/library/${entityId}`;
+      case "business_idea":
+        return "/business-ideas";
+      case "work_idea":
+        return "/work-ideas";
+      case "personal_idea":
+        return "/personal-ideas";
+      case "quote":
+        return "/quotes";
+      default:
+        return "/topics";
+    }
+  };
+
+  const handleAddSuggestedTopic = async (topicId: number) => {
+    if (!idea || idea.topics.some((topic) => topic.id === topicId)) return;
+    try {
+      setAiActionKey(`topic-${topicId}`);
+      setError("");
+      const updated = await updateBusinessIdea(idea.id, {
+        title: idea.title,
+        description: idea.description,
+        problem: idea.problem,
+        audience: idea.audience,
+        priority: idea.priority,
+        next_steps: idea.next_steps,
+        topic_ids: [...idea.topics.map((topic) => topic.id), topicId],
+        attachments: idea.attachments,
+      });
+      setIdeas((current) => current.map((item) => (item.id === idea.id ? updated : item)));
+      setAiSuggestions((current) =>
+        current
+          ? {
+              ...current,
+              suggested_topics: current.suggested_topics.filter((topic) => topic.topic_id !== topicId),
+            }
+          : current
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to add topic.");
+    } finally {
+      setAiActionKey("");
+    }
+  };
+
+  const handleCreateSuggestedConnection = async (
+    targetType: string,
+    targetId: number,
+    explanation: string
+  ) => {
+    if (!idea) return;
+    try {
+      setAiActionKey(`entity-${targetType}-${targetId}`);
+      setError("");
+      await createConnection({
+        source_type: "business_idea",
+        source_id: idea.id,
+        target_type: targetType,
+        target_id: targetId,
+        relationship_type: "ai_suggested",
+        notes: explanation,
+      });
+      setConnectionsKey((current) => current + 1);
+      setAiSuggestions((current) =>
+        current
+          ? {
+              ...current,
+              suggested_related_entities: current.suggested_related_entities.filter(
+                (entity) => !(entity.entity_type === targetType && entity.entity_id === targetId)
+              ),
+            }
+          : current
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to create connection.");
+    } finally {
+      setAiActionKey("");
+    }
+  };
+
   if (idea) {
     return (
       <div className="max-w-3xl mx-auto">
@@ -82,6 +216,12 @@ const BusinessIdeasPage = () => {
             </Badge>
           </div>
           <div className="flex gap-2">
+            <Button variant="outline" size="sm" className="gap-2" onClick={() => navigate(`/ask?prompt=${encodeURIComponent(`Help me think through this business idea: ${idea.title}`)}`)}>
+              <Brain className="h-3.5 w-3.5" /> Ask AI
+            </Button>
+            <Button variant="outline" size="sm" className="gap-2" onClick={() => void handleSummarize()}>
+              {summaryLoading ? "Summarizing..." : "Summarize"}
+            </Button>
             <Button variant="outline" size="sm" className="gap-2" onClick={() => navigate(`/capture?type=business&mode=edit&id=${idea.id}`)}>
               <Pencil className="h-3.5 w-3.5" /> Edit
             </Button>
@@ -92,6 +232,7 @@ const BusinessIdeasPage = () => {
         </div>
 
         <div className="space-y-4">
+          {summaryText && <ContentCard hover={false}><h3 className="mb-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground">AI Summary</h3><p className="text-sm text-foreground whitespace-pre-wrap">{summaryText}</p></ContentCard>}
           {idea.description && <ContentCard hover={false}><h3 className="mb-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Description</h3><p className="text-sm text-foreground">{idea.description}</p></ContentCard>}
           {idea.problem && <ContentCard hover={false}><h3 className="mb-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Problem</h3><p className="text-sm text-foreground">{idea.problem}</p></ContentCard>}
           {idea.audience && <ContentCard hover={false}><h3 className="mb-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Audience</h3><p className="text-sm text-foreground">{idea.audience}</p></ContentCard>}
@@ -113,7 +254,24 @@ const BusinessIdeasPage = () => {
         )}
 
         <div className="mt-6">
-          <ConnectionsPanel sourceType="business_idea" sourceId={idea.id} />
+          <ActionableAISuggestions
+            suggestions={aiSuggestions}
+            loading={aiLoading}
+            actionKey={aiActionKey}
+            appliedTopicIds={idea.topics.map((topic) => topic.id)}
+            onLoadSuggestions={handleLoadAiSuggestions}
+            onApplyTopic={(topicId) => handleAddSuggestedTopic(topicId)}
+            onApplyEntity={(entityType, entityId, explanation) =>
+              handleCreateSuggestedConnection(entityType, entityId, explanation)
+            }
+            onOpenEntity={(entityType, entityId) =>
+              navigate(getTargetPath(entityType, entityId))
+            }
+          />
+        </div>
+
+        <div className="mt-6">
+          <ConnectionsPanel key={connectionsKey} sourceType="business_idea" sourceId={idea.id} />
         </div>
 
         <div className="mt-6">

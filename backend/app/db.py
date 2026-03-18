@@ -26,7 +26,15 @@ def ensure_mvp_schema():
             )
         )
         conn.execute(
+            text(
+                "ALTER TABLE knowledge_items ADD COLUMN IF NOT EXISTS media_links_json TEXT"
+            )
+        )
+        conn.execute(
             text("ALTER TABLE quotes ADD COLUMN IF NOT EXISTS attachments_json TEXT")
+        )
+        conn.execute(
+            text("ALTER TABLE quotes ADD COLUMN IF NOT EXISTS book_type VARCHAR")
         )
         conn.execute(
             text(
@@ -115,6 +123,27 @@ def ensure_mvp_schema():
         conn.execute(
             text(
                 "ALTER TABLE discovery_items ADD COLUMN IF NOT EXISTS workspace_id INTEGER")
+        )
+        conn.execute(
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS ai_action_history (
+                    id SERIAL PRIMARY KEY,
+                    user_id INTEGER,
+                    workspace_id INTEGER,
+                    action_type VARCHAR NOT NULL,
+                    source_entity_type VARCHAR NOT NULL,
+                    source_entity_id INTEGER NOT NULL,
+                    target_entity_type VARCHAR NULL,
+                    target_entity_id INTEGER NULL,
+                    summary TEXT NULL,
+                    details TEXT NULL,
+                    rolled_back_at TIMESTAMP NULL,
+                    rollback_details TEXT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+                """
+            )
         )
         conn.execute(
             text("ALTER TABLE users ADD COLUMN IF NOT EXISTS workspace_id INTEGER")

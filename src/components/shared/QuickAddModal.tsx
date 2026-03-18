@@ -1,6 +1,6 @@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useNavigate } from 'react-router-dom';
-import { Link2, Brain, Lightbulb, Briefcase, Heart, Quote } from 'lucide-react';
+import { Link2, Brain, Lightbulb, Briefcase, Heart, Quote, BookOpen } from 'lucide-react';
 
 const quickAddItems = [
   { label: 'Knowledge Item', icon: Link2, tab: 'knowledge' },
@@ -9,6 +9,7 @@ const quickAddItems = [
   { label: 'Work Idea', icon: Briefcase, tab: 'work' },
   { label: 'Personal Idea', icon: Heart, tab: 'personal' },
   { label: 'Quote', icon: Quote, tab: 'quote' },
+  { label: 'Glossary Term', icon: BookOpen, tab: 'glossary' },
 ];
 
 interface QuickAddModalProps {

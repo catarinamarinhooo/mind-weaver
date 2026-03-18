@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { ActionableAISuggestions } from "@/components/shared/ActionableAISuggestions";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { AttachmentPreviewList } from "@/components/shared/AttachmentPreviewList";
 import { ContentCard } from "@/components/shared/ContentCard";
@@ -10,6 +11,9 @@ import {
   createConnection,
   deleteConnection,
   deleteKnowledgeItem,
+  getAiMediaInsights,
+  getAiSuggestions,
+  getAiSummary,
   getBusinessIdeas,
   getConnections,
   getKnowledgeItemById,
@@ -19,8 +23,11 @@ import {
   getThoughts,
   getTopics,
   getWorkIdeas,
+  updateKnowledgeItem,
+  type AISuggestionsResponse,
   type ConnectionResponse,
   type KnowledgeItemResponse,
+  type MediaLink,
 } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import {
@@ -58,6 +65,17 @@ const LibraryPage = () => {
   const [connectionTargetId, setConnectionTargetId] = useState("");
   const [relationshipType, setRelationshipType] = useState("");
   const [connectionNotes, setConnectionNotes] = useState("");
+  const [aiSuggestions, setAiSuggestions] = useState<AISuggestionsResponse | null>(null);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiActionKey, setAiActionKey] = useState("");
+  const [summaryText, setSummaryText] = useState("");
+  const [summaryLoading, setSummaryLoading] = useState(false);
+  const [mediaLabel, setMediaLabel] = useState("");
+  const [mediaUrl, setMediaUrl] = useState("");
+  const [mediaType, setMediaType] = useState("");
+  const [mediaNotes, setMediaNotes] = useState("");
+  const [savingMedia, setSavingMedia] = useState(false);
+  const [mediaInsightLoadingKey, setMediaInsightLoadingKey] = useState("");
   const [connectionOptions, setConnectionOptions] = useState<
     Record<string, { id: number; label: string }[]>
   >({
@@ -188,6 +206,11 @@ const LibraryPage = () => {
     setItem(null);
   }, [isDetailView, itemId]);
 
+  useEffect(() => {
+    setAiSuggestions(null);
+    setSummaryText("");
+  }, [itemId]);
+
   const handleDelete = async (idToDelete: number) => {
     if (!window.confirm("Are you sure you want to delete this knowledge item?")) {
       return;
@@ -252,6 +275,267 @@ const LibraryPage = () => {
     }
   };
 
+  const handleLoadAiSuggestions = async () => {
+    if (!item) {
+      return;
+    }
+    try {
+      setAiLoading(true);
+      setError("");
+      setAiSuggestions(await getAiSuggestions("knowledge", item.id));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load AI suggestions.");
+    } finally {
+      setAiLoading(false);
+    }
+  };
+
+  const handleAddSuggestedTopic = async (topicId: number) => {
+    if (!item || item.topics.some((topic) => topic.id === topicId)) {
+      return;
+    }
+
+    try {
+      setAiActionKey(`topic-${topicId}`);
+      setError("");
+      const updatedItem = await updateKnowledgeItem(item.id, {
+        title: item.title,
+        url: item.url,
+        personal_note: item.personal_note,
+        source: item.source,
+        description: item.description,
+        attachments: item.attachments,
+        media_links: item.media_links,
+        topic_ids: [...item.topics.map((topic) => topic.id), topicId],
+      });
+      setItem(updatedItem);
+      setAiSuggestions((current) =>
+        current
+          ? {
+              ...current,
+              suggested_topics: current.suggested_topics.filter(
+                (topic) => topic.topic_id !== topicId
+              ),
+            }
+          : current
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to add topic.");
+    } finally {
+      setAiActionKey("");
+    }
+  };
+
+  const handleCreateSuggestedConnection = async (
+    targetType: string,
+    targetId: number,
+    explanation: string
+  ) => {
+    if (!item) {
+      return;
+    }
+
+    try {
+      setAiActionKey(`entity-${targetType}-${targetId}`);
+      setError("");
+      const newConnection = await createConnection({
+        source_type: "knowledge",
+        source_id: item.id,
+        target_type: targetType,
+        target_id: targetId,
+        relationship_type: "ai_suggested",
+        notes: explanation,
+      });
+      setConnections((current) => [newConnection, ...current]);
+      setAiSuggestions((current) =>
+        current
+          ? {
+              ...current,
+              suggested_related_entities: current.suggested_related_entities.filter(
+                (entity) =>
+                  !(
+                    entity.entity_type === targetType && entity.entity_id === targetId
+                  )
+              ),
+            }
+          : current
+      );
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Failed to create suggested connection."
+      );
+    } finally {
+      setAiActionKey("");
+    }
+  };
+
+  const handleSummarize = async () => {
+    if (!item) {
+      return;
+    }
+    try {
+      setSummaryLoading(true);
+      setError("");
+      const result = await getAiSummary({
+        entity_type: "knowledge",
+        entity_id: item.id,
+      });
+      setSummaryText(result.summary);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to summarize knowledge item.");
+    } finally {
+      setSummaryLoading(false);
+    }
+  };
+
+  const handleAddMediaLink = async () => {
+    if (!item || !mediaUrl.trim()) {
+      setError("Media URL is required.");
+      return;
+    }
+
+    const nextMediaLinks: MediaLink[] = [
+      ...(item.media_links || []),
+      {
+        label: mediaLabel.trim() || mediaType.trim() || "Media link",
+        url: mediaUrl.trim(),
+        media_type: mediaType.trim() || null,
+        notes: mediaNotes.trim() || null,
+      },
+    ];
+
+    try {
+      setSavingMedia(true);
+      setError("");
+      const updatedItem = await updateKnowledgeItem(item.id, {
+        title: item.title,
+        url: item.url,
+        personal_note: item.personal_note,
+        source: item.source,
+        description: item.description,
+        attachments: item.attachments,
+        media_links: nextMediaLinks,
+        topic_ids: item.topics.map((topic) => topic.id),
+      });
+      setItem(updatedItem);
+      setMediaLabel("");
+      setMediaUrl("");
+      setMediaType("");
+      setMediaNotes("");
+      setActionMessage("Media link added successfully.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to add media link.");
+    } finally {
+      setSavingMedia(false);
+    }
+  };
+
+  const handleRemoveMediaLink = async (urlToRemove: string) => {
+    if (!item) {
+      return;
+    }
+
+    try {
+      setSavingMedia(true);
+      setError("");
+      const updatedItem = await updateKnowledgeItem(item.id, {
+        title: item.title,
+        url: item.url,
+        personal_note: item.personal_note,
+        source: item.source,
+        description: item.description,
+        attachments: item.attachments,
+        media_links: item.media_links.filter((mediaLink) => mediaLink.url !== urlToRemove),
+        topic_ids: item.topics.map((topic) => topic.id),
+      });
+      setItem(updatedItem);
+      setActionMessage("Media link removed successfully.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to remove media link.");
+    } finally {
+      setSavingMedia(false);
+    }
+  };
+
+  const handleAnalyzeMediaLink = async (mediaLink: MediaLink) => {
+    if (!item) {
+      return;
+    }
+
+    try {
+      setMediaInsightLoadingKey(mediaLink.url);
+      setError("");
+      const result = await getAiMediaInsights({
+        knowledge_item_id: item.id,
+        media_url: mediaLink.url,
+        media_type: mediaLink.media_type,
+        label: mediaLink.label,
+        notes: mediaLink.notes,
+      });
+      setItem((current) =>
+        current
+          ? {
+              ...current,
+              media_links: current.media_links.map((entry) =>
+                entry.url === mediaLink.url
+                  ? {
+                      ...entry,
+                      ai_title: result.title,
+                      ai_summary: result.summary,
+                      ai_key_points: result.key_points,
+                      ai_last_analyzed_at: result.analyzed_at,
+                      ai_source_kind: result.source_kind,
+                      ai_transcript_used: result.transcript_used,
+                    }
+                  : entry
+              ),
+            }
+          : current
+      );
+      setActionMessage("AI media insight saved to this knowledge item.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to analyze media link.");
+    } finally {
+      setMediaInsightLoadingKey("");
+    }
+  };
+
+  const handleDeleteMediaInsight = async (mediaLink: MediaLink) => {
+    if (!item) {
+      return;
+    }
+
+    try {
+      setSavingMedia(true);
+      setError("");
+      const updatedItem = await updateKnowledgeItem(item.id, {
+        title: item.title,
+        url: item.url,
+        personal_note: item.personal_note,
+        source: item.source,
+        description: item.description,
+        attachments: item.attachments,
+        topic_ids: item.topics.map((topic) => topic.id),
+        media_links: item.media_links.map((entry) =>
+          entry.url === mediaLink.url
+            ? {
+                label: entry.label,
+                url: entry.url,
+                media_type: entry.media_type || null,
+                notes: entry.notes || null,
+              }
+            : entry
+        ),
+      });
+      setItem(updatedItem);
+      setActionMessage("AI media insight deleted successfully.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to delete media insight.");
+    } finally {
+      setSavingMedia(false);
+    }
+  };
+
   if (isDetailView) {
     return (
       <div className="max-w-3xl mx-auto">
@@ -272,6 +556,11 @@ const LibraryPage = () => {
 
         {!loading && !error && item && (
           <>
+            {actionMessage && (
+              <div className="mb-4 rounded-md border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-700">
+                {actionMessage}
+              </div>
+            )}
             {updatedItem === "knowledge" && (
               <div className="mb-4 rounded-md border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-700">
                 Knowledge item updated successfully.
@@ -291,6 +580,14 @@ const LibraryPage = () => {
               </div>
 
               <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-2"
+                  onClick={() => void handleSummarize()}
+                >
+                  {summaryLoading ? "Summarizing..." : "Summarize"}
+                </Button>
                 <Button
                   variant="outline"
                   size="sm"
@@ -346,6 +643,192 @@ const LibraryPage = () => {
                 <AttachmentPreviewList title="Images and Files" attachments={item.attachments} />
               </div>
             )}
+
+            <div className="mb-6 rounded-xl border border-border bg-background/80 p-4 space-y-4">
+              <div>
+                <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  YouTube / Podcast Links
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  Add media links and notes. AI summaries use these notes as extra context for main ideas.
+                </p>
+              </div>
+
+              <div className="grid gap-3 md:grid-cols-2">
+                <Input
+                  placeholder="Label, e.g. Podcast episode"
+                  value={mediaLabel}
+                  onChange={(event) => setMediaLabel(event.target.value)}
+                />
+                <Input
+                  placeholder="https://youtube.com/... or podcast URL"
+                  value={mediaUrl}
+                  onChange={(event) => setMediaUrl(event.target.value)}
+                />
+              </div>
+
+              <div className="grid gap-3 md:grid-cols-2">
+                <Select value={mediaType} onValueChange={setMediaType}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select media type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="youtube">YouTube</SelectItem>
+                    <SelectItem value="podcast">Podcast</SelectItem>
+                    <SelectItem value="video">Video</SelectItem>
+                    <SelectItem value="audio">Audio</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Button
+                  variant="outline"
+                  disabled={savingMedia}
+                  onClick={() => void handleAddMediaLink()}
+                >
+                  {savingMedia ? "Saving..." : "Add Media Link"}
+                </Button>
+              </div>
+
+              <Input
+                placeholder="Optional notes, transcript snippet, or key ideas from this media"
+                value={mediaNotes}
+                onChange={(event) => setMediaNotes(event.target.value)}
+              />
+
+              <div className="space-y-3">
+                {item.media_links.length === 0 ? (
+                  <div className="text-sm text-muted-foreground">
+                    No media links yet.
+                  </div>
+                ) : (
+                  item.media_links.map((mediaLink) => (
+                    <div key={`${mediaLink.url}-${mediaLink.label}`} className="rounded-lg border border-border p-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="text-sm font-medium text-foreground">{mediaLink.label}</div>
+                          <a
+                            href={mediaLink.url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="mt-1 block break-all text-sm text-blue-600 underline"
+                          >
+                            {mediaLink.url}
+                          </a>
+                          {mediaLink.media_type && (
+                            <div className="mt-1 text-xs text-muted-foreground">
+                              Type: {mediaLink.media_type}
+                            </div>
+                          )}
+                          {mediaLink.notes && (
+                            <div className="mt-2 whitespace-pre-wrap text-sm text-muted-foreground">
+                              {mediaLink.notes}
+                            </div>
+                          )}
+                          {mediaLink.ai_summary && (
+                            <div className="mt-3 rounded-md border border-border bg-secondary/40 p-3">
+                              <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                                AI Media Insight
+                              </div>
+                              <div className="mt-2 text-sm font-medium text-foreground">
+                                {mediaLink.ai_title || mediaLink.label}
+                              </div>
+                              <div className="mt-2 whitespace-pre-wrap text-sm text-foreground">
+                                {mediaLink.ai_summary}
+                              </div>
+                              {(mediaLink.ai_key_points || []).length > 0 && (
+                                <div className="mt-2 space-y-1">
+                                  {(mediaLink.ai_key_points || []).map((point) => (
+                                    <div key={point} className="text-sm text-muted-foreground">
+                                      - {point}
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                              <div className="mt-2 text-xs text-muted-foreground">
+                                Source: {mediaLink.ai_source_kind || "unknown"}
+                                {mediaLink.ai_transcript_used ? " - transcript used" : ""}
+                                {mediaLink.ai_last_analyzed_at
+                                  ? ` - saved ${new Date(mediaLink.ai_last_analyzed_at).toLocaleString()}`
+                                  : ""}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex flex-col gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            disabled={mediaInsightLoadingKey === mediaLink.url}
+                            onClick={() => void handleAnalyzeMediaLink(mediaLink)}
+                          >
+                            {mediaInsightLoadingKey === mediaLink.url
+                              ? "Analyzing..."
+                              : mediaLink.ai_summary
+                                ? "Refresh Insight"
+                                : "Analyze with AI"}
+                          </Button>
+                          {mediaLink.ai_summary && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              disabled={savingMedia}
+                              onClick={() => void handleDeleteMediaInsight(mediaLink)}
+                            >
+                              Delete Insight
+                            </Button>
+                          )}
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            disabled={savingMedia}
+                            onClick={() => void handleRemoveMediaLink(mediaLink.url)}
+                          >
+                            Remove
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+
+            {summaryText && (
+              <div className="mb-6 rounded-xl border border-border bg-background/80 p-4">
+                <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  AI Summary
+                </div>
+                <p className="text-sm text-foreground whitespace-pre-wrap">{summaryText}</p>
+              </div>
+            )}
+
+            <ActionableAISuggestions
+              suggestions={aiSuggestions}
+              loading={aiLoading}
+              actionKey={aiActionKey}
+              appliedTopicIds={item.topics.map((topic) => topic.id)}
+              onLoadSuggestions={handleLoadAiSuggestions}
+              onApplyTopic={(topicId) => handleAddSuggestedTopic(topicId)}
+              onApplyEntity={(entityType, entityId, explanation) =>
+                handleCreateSuggestedConnection(entityType, entityId, explanation)
+              }
+              onOpenEntity={(entityType, entityId) =>
+                navigate(
+                  entityType === "thought"
+                    ? `/thoughts/${entityId}`
+                    : entityType === "knowledge"
+                      ? `/library/${entityId}`
+                      : entityType === "business_idea"
+                        ? "/business-ideas"
+                        : entityType === "work_idea"
+                          ? "/work-ideas"
+                          : entityType === "personal_idea"
+                            ? "/personal-ideas"
+                            : entityType === "quote"
+                              ? "/quotes"
+                              : "/topics"
+                )
+              }
+            />
 
             <div className="glass-card p-6">
               <h2 className="mb-4 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
@@ -449,6 +932,15 @@ const LibraryPage = () => {
                     item.description,
                     item.personal_note,
                     item.source,
+                    ...item.media_links.flatMap((mediaLink) => [
+                      mediaLink.label,
+                      mediaLink.url,
+                      mediaLink.media_type,
+                      mediaLink.notes,
+                      mediaLink.ai_title,
+                      mediaLink.ai_summary,
+                      ...(mediaLink.ai_key_points || []),
+                    ]),
                   ]
                     .filter(Boolean)
                     .join(" "),

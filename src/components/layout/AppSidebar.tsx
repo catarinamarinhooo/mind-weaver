@@ -20,6 +20,7 @@ import {
   Search,
   Shield,
   Sparkles,
+  History,
 } from "lucide-react";
 import { getUserProfile } from "@/lib/userProfile";
 import { cn } from "@/lib/utils";
@@ -40,6 +41,7 @@ const baseNavItems = [
   { label: "Updates", path: "/updates", icon: Bell },
   { label: "Connections", path: "/connections", icon: GitBranch },
   { label: "Recommended Links", path: "/recommendations", icon: Sparkles },
+  { label: "AI History", path: "/ai-history", icon: History },
   { label: "Search", path: "/search", icon: Search },
   { label: "Ask AI", path: "/ask", icon: MessageCircle },
 ];

@@ -23,6 +23,7 @@ import AskPage from "./pages/AskPage";
 import UserPage from "./pages/UserPage";
 import UpdatesPage from "./pages/UpdatesPage";
 import RecommendationsPage from "./pages/RecommendationsPage";
+import AIHistoryPage from "./pages/AIHistoryPage";
 import AdminPage from "./pages/AdminPage";
 import LoginPage from "./pages/LoginPage";
 import NotFound from "./pages/NotFound";
@@ -54,6 +55,7 @@ const App = () => (
             <Route path="/discovery" element={<DiscoveryPage />} />
             <Route path="/connections" element={<ConnectionsPage />} />
             <Route path="/recommendations" element={<RecommendationsPage />} />
+            <Route path="/ai-history" element={<AIHistoryPage />} />
             <Route path="/search" element={<SearchPage />} />
             <Route path="/ask" element={<AskPage />} />
             <Route path="/user" element={<UserPage />} />

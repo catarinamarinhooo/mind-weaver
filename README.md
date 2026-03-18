@@ -516,6 +516,15 @@ Quick Hugging Face Spaces setup:
    - `SESSION_COOKIE_SECURE=true`
    - `UPLOADS_DIR=/app/backend/uploads`
 
+Security notes for Hugging Face Spaces:
+
+- Never commit `backend/.env` or any real secret into the repository.
+- Store `DATABASE_URL`, `OPENAI_API_KEY`, and admin credentials only in Space secrets/variables.
+- This repository now excludes local env files from Docker and Hugging Face upload contexts via `.dockerignore` and `.hfignore`.
+- Rotate any key that has ever been stored in a local file, shared screenshot, terminal history, or commit.
+- Use a dedicated low-privilege database user for production instead of reusing development credentials.
+- Keep `SESSION_COOKIE_SECURE=true` in public HTTPS deployments.
+
 ---
 
 ## Suggested Demo Flow for a Professor

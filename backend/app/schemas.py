@@ -53,6 +53,19 @@ class GlossaryAttachment(BaseModel):
     kind: Optional[str] = None
 
 
+class MediaLink(BaseModel):
+    label: str
+    url: str
+    media_type: Optional[str] = None
+    notes: Optional[str] = None
+    ai_title: Optional[str] = None
+    ai_summary: Optional[str] = None
+    ai_key_points: list[str] = []
+    ai_last_analyzed_at: Optional[datetime] = None
+    ai_source_kind: Optional[str] = None
+    ai_transcript_used: Optional[bool] = None
+
+
 class KnowledgeItemCreate(BaseModel):
     title: Optional[str] = None
     url: str
@@ -61,6 +74,7 @@ class KnowledgeItemCreate(BaseModel):
     description: Optional[str] = None
     topic_ids: list[int] = []
     attachments: list["GlossaryAttachment"] = []
+    media_links: list["MediaLink"] = []
 
 
 class KnowledgeItemResponse(BaseModel):
@@ -72,6 +86,7 @@ class KnowledgeItemResponse(BaseModel):
     description: Optional[str] = None
     topics: list[TopicResponse] = []
     attachments: list["GlossaryAttachment"] = []
+    media_links: list["MediaLink"] = []
     created_at: datetime
 
     class Config:
@@ -107,6 +122,7 @@ class BusinessIdeaResponse(BaseModel):
 
 class QuoteCreate(BaseModel):
     book_title: str
+    book_type: Optional[str] = None
     quote_text: str
     page: Optional[str] = None
     thoughts: Optional[str] = None
@@ -116,6 +132,7 @@ class QuoteCreate(BaseModel):
 class QuoteResponse(BaseModel):
     id: int
     book_title: str
+    book_type: Optional[str] = None
     quote_text: str
     page: Optional[str] = None
     thoughts: Optional[str] = None
@@ -411,6 +428,148 @@ class ResetPasswordRequest(BaseModel):
 
 class MessageResponse(BaseModel):
     message: str
+
+
+class AISuggestedTopic(BaseModel):
+    topic_id: int
+    topic_name: str
+    score: int
+    explanation: str
+
+
+class AISuggestedEntity(BaseModel):
+    entity_type: str
+    entity_id: int
+    label: str
+    score: int
+    explanation: str
+
+
+class AISuggestionsResponse(BaseModel):
+    entity_type: str
+    entity_id: int
+    explanation: str
+    suggested_topics: list[AISuggestedTopic]
+    suggested_related_entities: list[AISuggestedEntity]
+
+
+class AIChatMessage(BaseModel):
+    role: str
+    content: str
+
+
+class AIChatRequest(BaseModel):
+    message: str
+    history: list[AIChatMessage] = []
+
+
+class AIChatCitation(BaseModel):
+    entity_type: str
+    entity_id: int
+    label: str
+    score: Optional[int] = None
+    url: Optional[str] = None
+    parent_entity_type: Optional[str] = None
+    parent_entity_id: Optional[int] = None
+    parent_label: Optional[str] = None
+
+
+class AIChatResponse(BaseModel):
+    answer: str
+    citations: list[AIChatCitation] = []
+
+
+class AISummaryRequest(BaseModel):
+    entity_type: str
+    entity_id: int
+
+
+class AISummaryResponse(BaseModel):
+    entity_type: str
+    entity_id: int
+    title: str
+    summary: str
+
+
+class AIDiscoveryTriageRequest(BaseModel):
+    discovery_item_id: int
+
+
+class AIDiscoveryTriageResponse(BaseModel):
+    discovery_item_id: int
+    relevance_score: int
+    recommended_action: str
+    suggested_topic: Optional[str] = None
+    explanation: str
+
+
+class AIMediaInsightsRequest(BaseModel):
+    knowledge_item_id: int
+    media_url: str
+    media_type: Optional[str] = None
+    label: Optional[str] = None
+    notes: Optional[str] = None
+
+
+class AIMediaInsightsResponse(BaseModel):
+    knowledge_item_id: int
+    media_url: str
+    media_type: Optional[str] = None
+    title: str
+    summary: str
+    key_points: list[str] = []
+    transcript_used: bool = False
+    source_kind: str
+    analyzed_at: datetime
+
+
+class AIApplyThoughtConversionRequest(BaseModel):
+    thought_id: int
+    target_type: str
+
+
+class AIApplyThoughtConversionResponse(BaseModel):
+    action_type: str
+    target_type: str
+    target_id: int
+    target_path: str
+    title: str
+    suggested_next_steps: str
+
+
+class AIApplyDiscoveryActionRequest(BaseModel):
+    discovery_item_id: int
+
+
+class AIApplyDiscoveryActionResponse(BaseModel):
+    action_type: str
+    discovery_item_id: int
+    recommended_action: str
+    target_path: str
+    suggested_topic: Optional[str] = None
+    explanation: str
+
+
+class AIActionHistoryResponse(BaseModel):
+    id: int
+    action_type: str
+    source_entity_type: str
+    source_entity_id: int
+    target_entity_type: Optional[str] = None
+    target_entity_id: Optional[int] = None
+    summary: Optional[str] = None
+    details: Optional[str] = None
+    rolled_back_at: Optional[datetime] = None
+    rollback_details: Optional[str] = None
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class AIActionRollbackResponse(BaseModel):
+    message: str
+    history_entry_id: int
 
 
 class AuthResponse(BaseModel):

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import {
+  Sparkles,
   BookmarkPlus,
   ExternalLink,
   Filter,
@@ -29,8 +30,10 @@ import {
   getWatchlists,
   refreshWatchlist,
   saveDiscoveryItemToLibrary,
+  triageDiscoveryItemWithAi,
   updateDiscoveryItem,
   type DiscoveryItemResponse,
+  type AIDiscoveryTriageResponse,
   type TopicResponse,
   type WatchlistResponse,
 } from "@/lib/api";
@@ -60,6 +63,8 @@ const DiscoveryPage = () => {
   const [relatedContext, setRelatedContext] = useState<Awaited<
     ReturnType<typeof loadWorkspaceSuggestionContext>
   > | null>(null);
+  const [triageResults, setTriageResults] = useState<Record<number, AIDiscoveryTriageResponse>>({});
+  const [triageLoadingId, setTriageLoadingId] = useState<number | null>(null);
 
   const loadData = async () => {
     try {
@@ -195,6 +200,35 @@ const DiscoveryPage = () => {
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to assign topic.");
     }
+  };
+
+  const handleTriageWithAi = async (itemId: number) => {
+    try {
+      setError("");
+      setTriageLoadingId(itemId);
+      const result = await triageDiscoveryItemWithAi(itemId);
+      setTriageResults((current) => ({ ...current, [itemId]: result }));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to triage with AI.");
+    } finally {
+      setTriageLoadingId(null);
+    }
+  };
+
+  const applyTriageRecommendation = async (result: AIDiscoveryTriageResponse) => {
+    if (result.suggested_topic) {
+      await handleAssignTopic(result.discovery_item_id, result.suggested_topic);
+    }
+
+    if (result.recommended_action === "save_to_library") {
+      await handleSaveToLibrary(result.discovery_item_id);
+      return;
+    }
+    if (result.recommended_action === "save_in_discovery") {
+      await handleSaveInDiscovery(result.discovery_item_id);
+      return;
+    }
+    await handleDismiss(result.discovery_item_id);
   };
 
   const currentEmptyState = (() => {
@@ -376,6 +410,15 @@ const DiscoveryPage = () => {
                           variant="ghost"
                           size="icon"
                           className="h-8 w-8 text-muted-foreground"
+                          title="Triage with AI"
+                          onClick={() => void handleTriageWithAi(item.id)}
+                        >
+                          <Sparkles className="h-3.5 w-3.5" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-muted-foreground"
                           title="Save to library"
                           onClick={() => void handleSaveToLibrary(item.id)}
                         >
@@ -437,6 +480,47 @@ const DiscoveryPage = () => {
 
               {!item.dismissed && (
                 <div className="mt-4">
+                  {triageResults[item.id] && (
+                    <div className="mb-4 rounded-xl border border-accent/20 bg-accent/5 p-4">
+                      <div className="mb-2 flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+                          <Sparkles className="h-4 w-4 text-accent" />
+                          AI Triage
+                        </div>
+                        <Button
+                          size="sm"
+                          onClick={() => void applyTriageRecommendation(triageResults[item.id])}
+                        >
+                          Apply Recommendation
+                        </Button>
+                      </div>
+                      <div className="flex flex-wrap gap-2 text-xs mb-2">
+                        <TopicTag
+                          name={`score ${triageResults[item.id].relevance_score}/10`}
+                          variant="topic"
+                        />
+                        <TopicTag
+                          name={triageResults[item.id].recommended_action.replaceAll("_", " ")}
+                        />
+                        {triageResults[item.id].suggested_topic && (
+                          <TopicTag
+                            name={triageResults[item.id].suggested_topic || ""}
+                            variant="topic"
+                          />
+                        )}
+                      </div>
+                      <p className="text-sm text-muted-foreground">
+                        {triageResults[item.id].explanation}
+                      </p>
+                    </div>
+                  )}
+
+                  {triageLoadingId === item.id && (
+                    <div className="mb-4 rounded-xl border border-accent/20 bg-accent/5 p-4 text-sm text-muted-foreground">
+                      AI is reviewing this discovery item...
+                    </div>
+                  )}
+
                   <RelatedWorkspaceMatches
                     context={relatedContext}
                     source={{
